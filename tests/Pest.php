@@ -2,6 +2,6 @@
 
 declare(strict_types=1);
 
-use function Pest\Laravel\uses;
+use Antroly\Foundation\Tests\TestCase;
 
-uses()->in('tests');
+pest()->extend(TestCase::class)->in('Unit', 'Feature');

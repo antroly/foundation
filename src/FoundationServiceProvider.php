@@ -15,8 +15,9 @@ class FoundationServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->registerPublishes();
+
         if ($this->app->runningInConsole()) {
-            $this->registerPublishes();
             $this->registerCommands();
         }
     }
@@ -40,12 +41,16 @@ class FoundationServiceProvider extends ServiceProvider
             __DIR__ . '/../stubs/Http/ViewModels/BaseViewModel.php'                   => app_path('Http/ViewModels/BaseViewModel.php'),
             // Logging
             __DIR__ . '/../stubs/Logging/ActivityLogger.php'                          => app_path('Logging/ActivityLogger.php'),
-            __DIR__ . '/../stubs/Logging/Contracts/ActivityLoggerInterface.php'        => app_path('Logging/Contracts/ActivityLoggerInterface.php'),
+            __DIR__ . '/../stubs/Logging/Contracts/ActivityLoggerInterface.php'       => app_path('Logging/Contracts/ActivityLoggerInterface.php'),
             // Models
             __DIR__ . '/../stubs/Models/ActivityLog.php'                              => app_path('Models/ActivityLog.php'),
             // Providers
             __DIR__ . '/../stubs/Providers/AppServiceProvider.php'                    => app_path('Providers/AppServiceProvider.php'),
         ], 'antroly-foundation');
+
+        $this->publishes([
+            __DIR__ . '/../stubs/Tests/ArchitectureTest.php' => base_path('tests/ArchitectureTest.php'),
+        ], 'antroly-tests');
 
         $this->publishes([
             __DIR__ . '/../database/migrations/create_logs_table.php' => database_path('migrations/' . date('Y_m_d_His') . '_create_logs_table.php'),

@@ -14,11 +14,13 @@
     "require": {
         "php": "^8.2",
         "illuminate/support": "^11.0|^12.0",
-        "illuminate/http": "^11.0|^12.0"
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0"
     },
     "require-dev": {
         "orchestra/testbench": "^9.0|^10.0",
         "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0",
         "laravel/pint": "^1.0",
         "phpstan/phpstan": "^1.0"
     },
@@ -38,6 +40,12 @@
                 "Antroly\\Foundation\\FoundationServiceProvider"
             ]
         }
+    },
+    "scripts": {
+        "pest": "pest",
+        "test:coverage": "pest --coverage",
+        "lint": "pint",
+        "analyse": "phpstan analyse"
     },
     "config": {
         "sort-packages": true,

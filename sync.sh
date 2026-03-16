@@ -32,11 +32,13 @@ cat > "./composer.json" << 'END_OF_FILE_CONTENT_XQ9Z'
     "require": {
         "php": "^8.2",
         "illuminate/support": "^11.0|^12.0",
-        "illuminate/http": "^11.0|^12.0"
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/routing": "^11.0|^12.0"
     },
     "require-dev": {
         "orchestra/testbench": "^9.0|^10.0",
         "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0",
         "laravel/pint": "^1.0",
         "phpstan/phpstan": "^1.0"
     },
@@ -56,6 +58,12 @@ cat > "./composer.json" << 'END_OF_FILE_CONTENT_XQ9Z'
                 "Antroly\\Foundation\\FoundationServiceProvider"
             ]
         }
+    },
+    "scripts": {
+        "pest": "pest",
+        "test:coverage": "pest --coverage",
+        "lint": "pint",
+        "analyse": "phpstan analyse"
     },
     "config": {
         "sort-packages": true,
@@ -109,8 +117,9 @@ class FoundationServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->registerPublishes();
+
         if ($this->app->runningInConsole()) {
-            $this->registerPublishes();
             $this->registerCommands();
         }
     }
@@ -134,12 +143,16 @@ class FoundationServiceProvider extends ServiceProvider
             __DIR__ . '/../stubs/Http/ViewModels/BaseViewModel.php'                   => app_path('Http/ViewModels/BaseViewModel.php'),
             // Logging
             __DIR__ . '/../stubs/Logging/ActivityLogger.php'                          => app_path('Logging/ActivityLogger.php'),
-            __DIR__ . '/../stubs/Logging/Contracts/ActivityLoggerInterface.php'        => app_path('Logging/Contracts/ActivityLoggerInterface.php'),
+            __DIR__ . '/../stubs/Logging/Contracts/ActivityLoggerInterface.php'       => app_path('Logging/Contracts/ActivityLoggerInterface.php'),
             // Models
             __DIR__ . '/../stubs/Models/ActivityLog.php'                              => app_path('Models/ActivityLog.php'),
             // Providers
             __DIR__ . '/../stubs/Providers/AppServiceProvider.php'                    => app_path('Providers/AppServiceProvider.php'),
         ], 'antroly-foundation');
+
+        $this->publishes([
+            __DIR__ . '/../stubs/Tests/ArchitectureTest.php' => base_path('tests/ArchitectureTest.php'),
+        ], 'antroly-tests');
 
         $this->publishes([
             __DIR__ . '/../database/migrations/create_logs_table.php' => database_path('migrations/' . date('Y_m_d_His') . '_create_logs_table.php'),
@@ -707,17 +720,370 @@ class AppServiceProvider extends ServiceProvider
 END_OF_FILE_CONTENT_XQ9Z
 echo "  ✓ stubs/Providers/AppServiceProvider.php"
 
+mkdir -p "$(dirname "./stubs/Tests/ArchitectureTest.php")"
+cat > "./stubs/Tests/ArchitectureTest.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+describe('Architecture', function () {
+
+    it('actions extend base Action class')
+        ->expect('App\Actions')
+        ->toExtend('App\Actions\Action');
+
+    it('actions do not return Eloquent models')
+        ->expect('App\Actions')
+        ->not->toUse('Illuminate\Database\Eloquent\Model');
+
+    it('dtos extend BaseDto')
+        ->expect('App\Dtos')
+        ->toExtend('App\Dtos\BaseDto');
+
+    it('dtos do not depend on Eloquent models')
+        ->expect('App\Dtos')
+        ->not->toUse('Illuminate\Database\Eloquent\Model');
+
+    it('resources extend BaseResource')
+        ->expect('App\Http\Resources')
+        ->toExtend('App\Http\Resources\BaseResource');
+
+    it('resources do not depend on Eloquent models')
+        ->expect('App\Http\Resources')
+        ->not->toUse('Illuminate\Database\Eloquent\Model');
+
+    it('controllers do not use Eloquent directly')
+        ->expect('App\Http\Controllers')
+        ->not->toUse('Illuminate\Database\Eloquent\Model');
+
+    it('viewmodels extend BaseViewModel')
+        ->expect('App\Http\ViewModels')
+        ->toExtend('App\Http\ViewModels\BaseViewModel');
+
+});
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ stubs/Tests/ArchitectureTest.php"
+
+mkdir -p "$(dirname "./tests/Feature/ServiceProviderTest.php")"
+cat > "./tests/Feature/ServiceProviderTest.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+use Antroly\Foundation\FoundationServiceProvider;
+use Illuminate\Support\ServiceProvider;
+
+beforeEach(function () {
+    $provider = new FoundationServiceProvider($this->app);
+    $provider->boot();
+});
+
+describe('FoundationServiceProvider', function () {
+
+    it('registers the antroly-foundation publish tag', function () {
+        $publishes = ServiceProvider::pathsToPublish(
+            FoundationServiceProvider::class,
+            'antroly-foundation',
+        );
+
+        expect($publishes)->not->toBeEmpty();
+    });
+
+    it('registers the antroly-migrations publish tag', function () {
+        $publishes = ServiceProvider::pathsToPublish(
+            FoundationServiceProvider::class,
+            'antroly-migrations',
+        );
+
+        expect($publishes)->not->toBeEmpty();
+    });
+
+    it('registers the antroly-tests publish tag', function () {
+        $publishes = ServiceProvider::pathsToPublish(
+            FoundationServiceProvider::class,
+            'antroly-tests',
+        );
+
+        expect($publishes)->not->toBeEmpty();
+    });
+
+    it('publishes all expected foundation stubs', function () {
+        $publishes = ServiceProvider::pathsToPublish(
+            FoundationServiceProvider::class,
+            'antroly-foundation',
+        );
+
+        $publishedFiles = array_map('basename', array_values($publishes));
+
+        expect($publishedFiles)
+            ->toContain('Action.php')
+            ->toContain('BaseDto.php')
+            ->toContain('HasErrorCodeInterface.php')
+            ->toContain('DomainException.php')
+            ->toContain('AppExceptionHandler.php')
+            ->toContain('BaseController.php')
+            ->toContain('ResponseMacros.php')
+            ->toContain('BaseResource.php')
+            ->toContain('BaseViewModel.php')
+            ->toContain('ActivityLogger.php')
+            ->toContain('ActivityLoggerInterface.php')
+            ->toContain('ActivityLog.php')
+            ->toContain('AppServiceProvider.php');
+    });
+
+    it('publishes the logs migration', function () {
+        $publishes = ServiceProvider::pathsToPublish(
+            FoundationServiceProvider::class,
+            'antroly-migrations',
+        );
+
+        $sourceFiles = array_map('basename', array_keys($publishes));
+
+        expect($sourceFiles)->toContain('create_logs_table.php');
+    });
+
+    it('publishes the architecture test', function () {
+        $publishes = ServiceProvider::pathsToPublish(
+            FoundationServiceProvider::class,
+            'antroly-tests',
+        );
+
+        $sourceFiles = array_map('basename', array_keys($publishes));
+
+        expect($sourceFiles)->toContain('ArchitectureTest.php');
+    });
+
+});
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ tests/Feature/ServiceProviderTest.php"
+
+mkdir -p "$(dirname "./tests/Feature/StubsTest.php")"
+cat > "./tests/Feature/StubsTest.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+$stubsBase = realpath(__DIR__ . '/../../stubs');
+
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($stubsBase, RecursiveDirectoryIterator::SKIP_DOTS)
+);
+
+$dataset = [];
+foreach ($iterator as $file) {
+    if ($file->isFile() && $file->getExtension() === 'php') {
+        $key = str_replace($stubsBase . '/', '', $file->getPathname());
+        $dataset[$key] = [$file->getPathname()];
+    }
+}
+
+it('stub is valid PHP: <filename>', function (string $path) {
+    $output = shell_exec("php -l {$path} 2>&1");
+    expect($output)->toContain('No syntax errors detected');
+})->with($dataset);
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ tests/Feature/StubsTest.php"
+
 mkdir -p "$(dirname "./tests/Pest.php")"
 cat > "./tests/Pest.php" << 'END_OF_FILE_CONTENT_XQ9Z'
 <?php
 
 declare(strict_types=1);
 
-use function Pest\Laravel\uses;
+use Antroly\Foundation\Tests\TestCase;
 
-uses()->in('tests');
+pest()->extend(TestCase::class)->in('Unit', 'Feature');
 END_OF_FILE_CONTENT_XQ9Z
 echo "  ✓ tests/Pest.php"
+
+mkdir -p "$(dirname "./tests/TestCase.php")"
+cat > "./tests/TestCase.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+namespace Antroly\Foundation\Tests;
+
+use Antroly\Foundation\FoundationServiceProvider;
+use Orchestra\Testbench\TestCase as OrchestraTestCase;
+
+class TestCase extends OrchestraTestCase
+{
+    protected function getPackageProviders($app): array
+    {
+        return [
+            FoundationServiceProvider::class,
+        ];
+    }
+}
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ tests/TestCase.php"
+
+mkdir -p "$(dirname "./tests/Unit/ResponseMacrosTest.php")"
+cat > "./tests/Unit/ResponseMacrosTest.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Http\JsonResponse;
+use Illuminate\Routing\ResponseFactory;
+
+beforeEach(function () {
+    /** @var ResponseFactory $factory */
+    $factory = app(ResponseFactory::class);
+
+    $factory->macro('success', function (
+        int $statusCode,
+        mixed $data = null,
+        ?string $message = null,
+    ) use ($factory): JsonResponse {
+        return $factory->json([
+            'statusCode' => $statusCode,
+            'error'      => false,
+            'message'    => $message,
+            'errorCode'  => null,
+            'errorBags'  => null,
+            'data'       => $data,
+        ], $statusCode);
+    });
+
+    $factory->macro('error', function (
+        int $statusCode,
+        ?string $errorMessage = null,
+        ?array $errorBags = [],
+        ?string $errorCode = null,
+    ) use ($factory): JsonResponse {
+        $fallbackCode = match (true) {
+            $statusCode === 422 => 'validation.failed',
+            $statusCode === 401 => 'http.401',
+            $statusCode === 403 => 'http.403',
+            $statusCode === 404 => 'http.404',
+            $statusCode === 405 => 'http.405',
+            $statusCode === 429 => 'http.429',
+            $statusCode >= 500  => 'exception.unexpected',
+            default             => "http.{$statusCode}",
+        };
+
+        return $factory->json([
+            'statusCode' => $statusCode,
+            'error'      => true,
+            'message'    => $errorMessage,
+            'errorCode'  => $errorCode ?? $fallbackCode,
+            'errorBags'  => $errorBags,
+            'data'       => null,
+        ], $statusCode);
+    });
+});
+
+describe('response()->success()', function () {
+
+    it('returns correct status code', function () {
+        expect(response()->success(200, ['id' => 1])->getStatusCode())->toBe(200);
+    });
+
+    it('returns correct envelope structure', function () {
+        $json = response()->success(200, ['id' => 1])->getData(true);
+
+        expect($json)->toMatchArray([
+            'statusCode' => 200,
+            'error'      => false,
+            'errorCode'  => null,
+            'errorBags'  => null,
+            'data'       => ['id' => 1],
+        ]);
+    });
+
+    it('includes message when provided', function () {
+        $json = response()->success(201, null, 'Created successfully')->getData(true);
+
+        expect($json['message'])->toBe('Created successfully');
+    });
+
+    it('sets message to null when not provided', function () {
+        $json = response()->success(200, ['id' => 1])->getData(true);
+
+        expect($json['message'])->toBeNull();
+    });
+
+    it('sets data to null when not provided', function () {
+        $json = response()->success(204)->getData(true);
+
+        expect($json['data'])->toBeNull();
+    });
+
+});
+
+describe('response()->error()', function () {
+
+    it('returns correct status code', function () {
+        expect(response()->error(422, 'Validation failed')->getStatusCode())->toBe(422);
+    });
+
+    it('returns correct envelope structure', function () {
+        $json = response()->error(422, 'Validation failed', ['field' => ['required' => 'Required']], 'validation.failed')->getData(true);
+
+        expect($json)->toMatchArray([
+            'statusCode' => 422,
+            'error'      => true,
+            'message'    => 'Validation failed',
+            'errorCode'  => 'validation.failed',
+            'data'       => null,
+        ]);
+    });
+
+    it('sets data to null always', function () {
+        $json = response()->error(500, 'Server error')->getData(true);
+
+        expect($json['data'])->toBeNull();
+    });
+
+});
+
+describe('response()->error() fallback error codes', function () {
+
+    it('uses validation.failed for 422', function () {
+        expect(response()->error(422)->getData(true)['errorCode'])->toBe('validation.failed');
+    });
+
+    it('uses http.401 for 401', function () {
+        expect(response()->error(401)->getData(true)['errorCode'])->toBe('http.401');
+    });
+
+    it('uses http.403 for 403', function () {
+        expect(response()->error(403)->getData(true)['errorCode'])->toBe('http.403');
+    });
+
+    it('uses http.404 for 404', function () {
+        expect(response()->error(404)->getData(true)['errorCode'])->toBe('http.404');
+    });
+
+    it('uses http.405 for 405', function () {
+        expect(response()->error(405)->getData(true)['errorCode'])->toBe('http.405');
+    });
+
+    it('uses http.429 for 429', function () {
+        expect(response()->error(429)->getData(true)['errorCode'])->toBe('http.429');
+    });
+
+    it('uses exception.unexpected for 500', function () {
+        expect(response()->error(500)->getData(true)['errorCode'])->toBe('exception.unexpected');
+    });
+
+    it('uses exception.unexpected for any 5xx', function () {
+        expect(response()->error(503)->getData(true)['errorCode'])->toBe('exception.unexpected');
+    });
+
+    it('uses dynamic http.{code} for other codes', function () {
+        expect(response()->error(409)->getData(true)['errorCode'])->toBe('http.409');
+    });
+
+    it('uses provided errorCode over fallback', function () {
+        expect(response()->error(422, 'Error', [], 'custom.code')->getData(true)['errorCode'])->toBe('custom.code');
+    });
+
+});
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ tests/Unit/ResponseMacrosTest.php"
 
 cp "$0" "./sync.sh"
 echo "  ✓ sync.sh"
