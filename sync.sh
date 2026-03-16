@@ -98,6 +98,504 @@ cat > "./pint.json" << 'END_OF_FILE_CONTENT_XQ9Z'
 END_OF_FILE_CONTENT_XQ9Z
 echo "  ✓ pint.json"
 
+mkdir -p "$(dirname "./src/Console/Commands/MakeAction.php")"
+cat > "./src/Console/Commands/MakeAction.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+namespace Antroly\Foundation\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+
+class MakeAction extends Command
+{
+    protected $signature = 'make:action {name : The action name, e.g. Course/CreateCourse}';
+
+    protected $description = 'Create a new Action with Submit and Result DTOs';
+
+    public function handle(): int
+    {
+        $name = $this->argument('name');
+
+        [$domain, $action] = $this->parseName($name);
+
+        $this->generateAction($domain, $action);
+        $this->generateSubmitDto($domain, $action);
+        $this->generateResultDto($domain, $action);
+
+        return self::SUCCESS;
+    }
+
+    private function parseName(string $name): array
+    {
+        if (str_contains($name, '/')) {
+            [$domain, $action] = explode('/', $name, 2);
+            return [Str::studly($domain), Str::studly($action)];
+        }
+
+        // No domain prefix — use the action name as both
+        $action = Str::studly($name);
+        return [$action, $action];
+    }
+
+    private function generateAction(string $domain, string $action): void
+    {
+        $className  = "{$action}Action";
+        $submitDto  = "{$action}SubmitDto";
+        $resultDto  = "{$action}ResultDto";
+        $namespace  = "App\\Actions\\{$domain}";
+        $dtoNs      = "App\\Dtos\\{$domain}";
+        $path       = app_path("Actions/{$domain}/{$className}.php");
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use App\Actions\Action;
+        use {$dtoNs}\\{$submitDto};
+        use {$dtoNs}\\{$resultDto};
+
+        final class {$className} extends Action
+        {
+            public function execute({$submitDto} \$dto): {$resultDto}
+            {
+                // TODO: implement
+            }
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("Action [{$path}] created successfully.");
+    }
+
+    private function generateSubmitDto(string $domain, string $action): void
+    {
+        $className = "{$action}SubmitDto";
+        $namespace = "App\\Dtos\\{$domain}";
+        $path      = app_path("Dtos/{$domain}/{$className}.php");
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use App\Dtos\BaseDto;
+
+        final class {$className} extends BaseDto
+        {
+            public function __construct(
+                // TODO: add typed properties
+            ) {}
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("SubmitDto [{$path}] created successfully.");
+    }
+
+    private function generateResultDto(string $domain, string $action): void
+    {
+        $className = "{$action}ResultDto";
+        $namespace = "App\\Dtos\\{$domain}";
+        $path      = app_path("Dtos/{$domain}/{$className}.php");
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use App\Dtos\BaseDto;
+
+        final class {$className} extends BaseDto
+        {
+            public function __construct(
+                // TODO: add typed properties
+            ) {}
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("ResultDto [{$path}] created successfully.");
+    }
+
+    private function writeFile(string $path, string $content): void
+    {
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        if (file_exists($path)) {
+            $this->components->warn("File [{$path}] already exists. Skipping.");
+            return;
+        }
+
+        file_put_contents($path, $content);
+    }
+}
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ src/Console/Commands/MakeAction.php"
+
+mkdir -p "$(dirname "./src/Console/Commands/MakeException.php")"
+cat > "./src/Console/Commands/MakeException.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+namespace Antroly\Foundation\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+
+class MakeException extends Command
+{
+    protected $signature = 'make:domain-exception {name : The exception name, e.g. Course/CourseExpired}';
+
+    protected $description = 'Create a new domain exception';
+
+    public function handle(): int
+    {
+        $name = $this->argument('name');
+
+        [$domain, $class] = $this->parseName($name);
+
+        $className = Str::studly($class);
+
+        if (! Str::endsWith($className, 'Exception')) {
+            $className .= 'Exception';
+        }
+
+        $namespace = $domain
+            ? "App\\Exceptions\\{$domain}"
+            : 'App\\Exceptions';
+
+        $path = $domain
+            ? app_path("Exceptions/{$domain}/{$className}.php")
+            : app_path("Exceptions/{$className}.php");
+
+        $errorCode      = $this->toErrorCode($domain, $className);
+        $defaultMessage = $this->toDefaultMessage($className);
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use App\Exceptions\DomainException;
+
+        final class {$className} extends DomainException
+        {
+            public function __construct()
+            {
+                parent::__construct(
+                    '{$defaultMessage}',
+                    422,
+                    '{$errorCode}',
+                );
+            }
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("Exception [{$path}] created successfully.");
+
+        return self::SUCCESS;
+    }
+
+    private function parseName(string $name): array
+    {
+        if (str_contains($name, '/')) {
+            [$domain, $class] = explode('/', $name, 2);
+            return [Str::studly($domain), $class];
+        }
+
+        return [null, $name];
+    }
+
+    private function toErrorCode(?string $domain, string $className): string
+    {
+        $base = Str::snake(Str::replaceLast('Exception', '', $className));
+
+        return $domain
+            ? Str::snake($domain) . '.' . $base
+            : 'exception.' . $base;
+    }
+
+    private function toDefaultMessage(string $className): string
+    {
+        $base = Str::replaceLast('Exception', '', $className);
+
+        // Split StudlyCase into words: CourseExpired -> Course expired
+        $words = preg_replace('/([A-Z])/', ' $1', $base);
+
+        return ucfirst(strtolower(trim($words))) . '.';
+    }
+
+    private function writeFile(string $path, string $content): void
+    {
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        if (file_exists($path)) {
+            $this->components->warn("File [{$path}] already exists. Skipping.");
+            return;
+        }
+
+        file_put_contents($path, $content);
+    }
+}
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ src/Console/Commands/MakeException.php"
+
+mkdir -p "$(dirname "./src/Console/Commands/MakeRequest.php")"
+cat > "./src/Console/Commands/MakeRequest.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+namespace Antroly\Foundation\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+
+class MakeRequest extends Command
+{
+    protected $signature = 'make:antroly-request {name : The request name, e.g. Course/CreateCourseRequest}';
+
+    protected $description = 'Create a new FormRequest that maps to a SubmitDto';
+
+    public function handle(): int
+    {
+        $name = $this->argument('name');
+
+        [$domain, $class] = $this->parseName($name);
+
+        $className = Str::studly($class);
+        $namespace = $domain ? "App\\Http\\Requests\\{$domain}" : 'App\\Http\\Requests';
+        $dtoNs     = $domain ? "App\\Dtos\\{$domain}" : 'App\\Dtos';
+        $submitDto = Str::replaceLast('Request', 'SubmitDto', $className);
+        $path      = $domain
+            ? app_path("Http/Requests/{$domain}/{$className}.php")
+            : app_path("Http/Requests/{$className}.php");
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use {$dtoNs}\\{$submitDto};
+        use Illuminate\Foundation\Http\FormRequest;
+
+        final class {$className} extends FormRequest
+        {
+            public function authorize(): bool
+            {
+                return true;
+            }
+
+            /**
+             * @return array<string, mixed>
+             */
+            public function rules(): array
+            {
+                return [
+                    // TODO: add validation rules
+                ];
+            }
+
+            public function toDto(): {$submitDto}
+            {
+                return new {$submitDto}(
+                    // TODO: map validated fields
+                );
+            }
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("Request [{$path}] created successfully.");
+
+        return self::SUCCESS;
+    }
+
+    private function parseName(string $name): array
+    {
+        if (str_contains($name, '/')) {
+            [$domain, $class] = explode('/', $name, 2);
+            return [Str::studly($domain), $class];
+        }
+
+        return [null, $name];
+    }
+
+    private function writeFile(string $path, string $content): void
+    {
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        if (file_exists($path)) {
+            $this->components->warn("File [{$path}] already exists. Skipping.");
+            return;
+        }
+
+        file_put_contents($path, $content);
+    }
+}
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ src/Console/Commands/MakeRequest.php"
+
+mkdir -p "$(dirname "./src/Console/Commands/MakeResource.php")"
+cat > "./src/Console/Commands/MakeResource.php" << 'END_OF_FILE_CONTENT_XQ9Z'
+<?php
+
+declare(strict_types=1);
+
+namespace Antroly\Foundation\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+
+class MakeResource extends Command
+{
+    protected $signature = 'make:antroly-resource {name : The resource name, e.g. Course/CourseResource}
+                            {--web : Generate a ViewModel instead of an API Resource}';
+
+    protected $description = 'Create a new Resource (API) or ViewModel (web)';
+
+    public function handle(): int
+    {
+        $name = $this->argument('name');
+        $web  = $this->option('web');
+
+        [$domain, $class] = $this->parseName($name);
+
+        $web
+            ? $this->generateViewModel($domain, $class)
+            : $this->generateResource($domain, $class);
+
+        return self::SUCCESS;
+    }
+
+    private function parseName(string $name): array
+    {
+        if (str_contains($name, '/')) {
+            [$domain, $class] = explode('/', $name, 2);
+            return [Str::studly($domain), Str::studly($class)];
+        }
+
+        return [null, Str::studly($name)];
+    }
+
+    private function generateResource(?string $domain, string $class): void
+    {
+        $className = Str::endsWith($class, 'Resource') ? $class : "{$class}Resource";
+        $namespace = $domain ? "App\\Http\\Resources\\{$domain}" : 'App\\Http\\Resources';
+        $path      = $domain
+            ? app_path("Http/Resources/{$domain}/{$className}.php")
+            : app_path("Http/Resources/{$className}.php");
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use App\Http\Resources\BaseResource;
+        use Illuminate\Http\Request;
+
+        final class {$className} extends BaseResource
+        {
+            /**
+             * @return array<string, mixed>
+             */
+            public function toArray(Request \$request): array
+            {
+                return [
+                    // TODO: map result DTO properties
+                ];
+            }
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("Resource [{$path}] created successfully.");
+    }
+
+    private function generateViewModel(?string $domain, string $class): void
+    {
+        $className = Str::endsWith($class, 'ViewModel') ? $class : "{$class}ViewModel";
+        $namespace = $domain ? "App\\Http\\ViewModels\\{$domain}" : 'App\\Http\\ViewModels';
+        $path      = $domain
+            ? app_path("Http/ViewModels/{$domain}/{$className}.php")
+            : app_path("Http/ViewModels/{$className}.php");
+
+        $content = <<<PHP
+        <?php
+
+        declare(strict_types=1);
+
+        namespace {$namespace};
+
+        use App\Http\ViewModels\BaseViewModel;
+
+        final class {$className} extends BaseViewModel
+        {
+            /**
+             * @return array<string, mixed>
+             */
+            public function toArray(): array
+            {
+                return [
+                    // TODO: map result DTO properties
+                ];
+            }
+        }
+        PHP;
+
+        $this->writeFile($path, $content);
+        $this->components->info("ViewModel [{$path}] created successfully.");
+    }
+
+    private function writeFile(string $path, string $content): void
+    {
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        if (file_exists($path)) {
+            $this->components->warn("File [{$path}] already exists. Skipping.");
+            return;
+        }
+
+        file_put_contents($path, $content);
+    }
+}
+END_OF_FILE_CONTENT_XQ9Z
+echo "  ✓ src/Console/Commands/MakeResource.php"
+
 mkdir -p "$(dirname "./src/FoundationServiceProvider.php")"
 cat > "./src/FoundationServiceProvider.php" << 'END_OF_FILE_CONTENT_XQ9Z'
 <?php
@@ -106,6 +604,10 @@ declare(strict_types=1);
 
 namespace Antroly\Foundation;
 
+use Antroly\Foundation\Console\Commands\MakeAction;
+use Antroly\Foundation\Console\Commands\MakeException;
+use Antroly\Foundation\Console\Commands\MakeRequest;
+use Antroly\Foundation\Console\Commands\MakeResource;
 use Illuminate\Support\ServiceProvider;
 
 class FoundationServiceProvider extends ServiceProvider
@@ -161,7 +663,12 @@ class FoundationServiceProvider extends ServiceProvider
 
     private function registerCommands(): void
     {
-        // Scaffolding commands registered here in a later step
+        $this->commands([
+            MakeAction::class,
+            MakeRequest::class,
+            MakeResource::class,
+            MakeException::class,
+        ]);
     }
 }
 END_OF_FILE_CONTENT_XQ9Z

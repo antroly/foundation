@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Antroly\Foundation;
 
+use Antroly\Foundation\Console\Commands\MakeAction;
+use Antroly\Foundation\Console\Commands\MakeException;
+use Antroly\Foundation\Console\Commands\MakeRequest;
+use Antroly\Foundation\Console\Commands\MakeResource;
 use Illuminate\Support\ServiceProvider;
 
 class FoundationServiceProvider extends ServiceProvider
@@ -59,6 +63,11 @@ class FoundationServiceProvider extends ServiceProvider
 
     private function registerCommands(): void
     {
-        // Scaffolding commands registered here in a later step
+        $this->commands([
+            MakeAction::class,
+            MakeRequest::class,
+            MakeResource::class,
+            MakeException::class,
+        ]);
     }
 }
