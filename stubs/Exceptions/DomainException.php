@@ -17,7 +17,7 @@ abstract class DomainException extends Exception implements HasErrorCodeInterfac
     {
         parent::__construct($message);
         $this->statusCode = $statusCode;
-        $this->errorCode = $errorCode;
+        $this->errorCode  = $errorCode;
     }
 
     public function getStatusCode(): int

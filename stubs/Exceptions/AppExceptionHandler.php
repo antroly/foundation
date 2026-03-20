@@ -6,7 +6,7 @@ namespace App\Exceptions;
 
 use App\Contracts\Exceptions\HasErrorCodeInterface;
 use App\Http\Controllers\BaseController;
-use App\Logging\Contracts\ActivityLoggerInterface;
+use App\Logging\Contracts\AppLogger;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -28,14 +28,14 @@ class AppExceptionHandler
         static::configureRendering($exceptions);
     }
 
-    private static function configureReporting(Exceptions $exceptions): void
+    protected static function configureReporting(Exceptions $exceptions): void
     {
         $exceptions->dontReport([
             ValidationException::class,
         ]);
 
         $exceptions->report(function (Throwable $e) {
-            app(ActivityLoggerInterface::class)->error($e->getMessage(), [
+            app(AppLogger::class)->error($e->getMessage(), [
                 'exception' => get_class($e),
                 'file'      => $e->getFile(),
                 'line'      => $e->getLine(),
@@ -43,11 +43,11 @@ class AppExceptionHandler
                 'trace'     => $e->getTraceAsString(),
             ]);
 
-            return false; // Let Laravel continue its default reporting
+            return false;
         });
     }
 
-    private static function configureRendering(Exceptions $exceptions): void
+    protected static function configureRendering(Exceptions $exceptions): void
     {
         $exceptions->render(function (Throwable $e, Request $request): ?Response {
             $expectsJson = $request->expectsJson() || $request->is('api/*');
@@ -57,7 +57,7 @@ class AppExceptionHandler
                     return app(BaseController::class)->toApiError($e);
                 }
 
-                return null; // Let Laravel handle Blade validation errors
+                return null;
             }
 
             if ($e instanceof HasErrorCodeInterface) {

@@ -10,4 +10,6 @@ abstract class Action
     {
         return app(static::class)->execute(...$arguments);
     }
+
+    abstract public function execute(): mixed;
 }

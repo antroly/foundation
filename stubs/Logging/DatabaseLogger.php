@@ -2,28 +2,34 @@
 
 declare(strict_types=1);
 
-namespace Antroly\Foundation\Logging;
+namespace App\Logging;
 
-use App\Logging\Contracts\ActivityLogger;
+use App\Logging\Contracts\AppLogger;
+use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Request;
 
-class DatabaseActivityLogger implements ActivityLogger
+class DatabaseLogger implements AppLogger
 {
+    /** @param array<string, mixed> $context */
     public function info(string $message, array $context = []): void
     {
         $this->write('info', $message, $context);
     }
 
+    /** @param array<string, mixed> $context */
     public function warning(string $message, array $context = []): void
     {
         $this->write('warning', $message, $context);
     }
 
+    /** @param array<string, mixed> $context */
     public function error(string $message, array $context = []): void
     {
         $this->write('error', $message, $context);
     }
 
+    /** @param array<string, mixed> $context */
     private function write(string $level, string $message, array $context): void
     {
         try {
@@ -31,12 +37,12 @@ class DatabaseActivityLogger implements ActivityLogger
                 'level'   => $level,
                 'message' => $message,
                 'context' => empty($context) ? null : $context,
-                'url'     => request()?->fullUrl(),
-                'ip'      => request()?->ip(),
+                'url'     => Request::fullUrl(),
+                'ip'      => Request::ip(),
                 'user_id' => Auth::id(),
             ]);
         } catch (\Throwable) {
-            // Silently fail — logger must never throw
+            // Silently fail — logger must never throw.
         }
     }
 }

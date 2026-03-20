@@ -2,6 +2,4 @@
 
 declare(strict_types=1);
 
-use Antroly\Foundation\Tests\TestCase;
-
-pest()->extend(TestCase::class)->in('Unit', 'Feature');
+uses(\Antroly\Foundation\Tests\TestCase::class)->in('Feature', 'Unit');

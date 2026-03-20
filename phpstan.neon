@@ -3,3 +3,8 @@ parameters:
     paths:
         - src
         - stubs
+    ignoreErrors:
+        # Eloquent magic static methods (create, find, etc.)
+        - '#Call to an undefined static method .+::create\(\)#'
+        # response() macros are registered at runtime
+        - '#Call to an undefined method Illuminate\\Contracts\\Routing\\ResponseFactory::(success|error)\(\)#'

@@ -36,14 +36,14 @@ class ResponseMacros
             ?string $errorCode = null,
         ) use ($factory): JsonResponse {
             $fallbackCode = match (true) {
-                $statusCode === 422              => 'validation.failed',
-                $statusCode === 401              => 'http.401',
-                $statusCode === 403              => 'http.403',
-                $statusCode === 404              => 'http.404',
-                $statusCode === 405              => 'http.405',
-                $statusCode === 429              => 'http.429',
-                $statusCode >= 500               => 'exception.unexpected',
-                default                          => "http.{$statusCode}",
+                $statusCode === 422 => 'validation.failed',
+                $statusCode === 401 => 'http.401',
+                $statusCode === 403 => 'http.403',
+                $statusCode === 404 => 'http.404',
+                $statusCode === 405 => 'http.405',
+                $statusCode === 429 => 'http.429',
+                $statusCode >= 500  => 'exception.unexpected',
+                default             => "http.{$statusCode}",
             };
 
             return $factory->json([

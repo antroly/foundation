@@ -28,23 +28,24 @@ class BaseController extends Controller
             return;
         }
 
-        $userMessage = $this->getUserMessage($e);
-        session()->flash('error', $userMessage);
+        session()->flash('error', $this->getUserMessage($e));
     }
 
     protected function getUserMessage(Throwable $exception): string
     {
-        return match (true) {
-            $exception instanceof QueryException         => __('exception.database_error'),
+        $message = match (true) {
+            $exception instanceof QueryException          => __('exception.database_error'),
             $exception instanceof AuthenticationException => __('exception.authentication_error'),
             $exception instanceof AuthorizationException  => __('exception.authorization_error'),
             $exception instanceof ModelNotFoundException  => __('exception.model_not_found'),
             $exception instanceof FileNotFoundException   => __('exception.file_not_found'),
             $exception instanceof HttpException && $exception->getStatusCode() === 500 => __('exception.internal_error'),
-            $exception instanceof HttpException          => $exception->getMessage(),
-            $exception instanceof ErrorException         => __('exception.unexpected_error'),
-            default                                      => __('exception.unexpected_error'),
+            $exception instanceof HttpException           => $exception->getMessage(),
+            $exception instanceof ErrorException          => __('exception.unexpected_error'),
+            default                                       => __('exception.unexpected_error'),
         };
+
+        return is_string($message) ? $message : '';
     }
 
     public function getStatusCode(Throwable $e): int
@@ -120,7 +121,7 @@ class BaseController extends Controller
             $rules       = array_keys($fieldFailed);
 
             foreach ($fieldMessages as $index => $message) {
-                $rule                          = $rules[$index] ?? 'Rule_' . $index;
+                $rule                                           = $rules[$index] ?? 'Rule_' . $index;
                 $normalized[$field][Str::lower((string) $rule)] = $message;
             }
         }
