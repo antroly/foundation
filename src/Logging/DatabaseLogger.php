@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Antroly\Foundation\Logging;
 
+use Antroly\Foundation\Logging\Contracts\AppLogger;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request;
 

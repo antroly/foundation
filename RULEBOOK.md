@@ -12,7 +12,7 @@ Every request in an Antroly application follows one pipeline, without exception:
 FormRequest → SubmitDto → Action → ResultDto → Resource / ViewModel
 ```
 
-Each layer has a single responsibility. Code that doesn't fit a layer belongs in the next appropriate one — never backwards, never skipped.
+Each step is mandatory — the pipeline must not be skipped.
 
 ---
 
@@ -67,10 +67,16 @@ final class EnrollStudentAction extends Action
 
 DTOs are plain data containers. They carry typed input into Actions and typed output out of them.
 
+There is no base DTO class. DTOs are plain `final` classes. Two optional contracts are available:
+
+- `App\Contracts\Dto\FromRequest` — implemented by SubmitDtos that map themselves from a FormRequest
+- `App\Contracts\Dto\ResultData` — marker interface implemented by ResultDtos
+
+These interfaces are optional and used when that behavior is needed.
+
 **A DTO must:**
-- Extend `App\Dtos\BaseDto`
-- Use typed, `readonly` constructor properties
 - Be `final`
+- Use typed, `readonly` constructor properties
 
 **A DTO must not:**
 - Contain business logic
@@ -83,17 +89,34 @@ DTOs are plain data containers. They carry typed input into Actions and typed ou
 - Output: `{Domain}ResultDto` — e.g. `CourseResultDto`
 
 ```php
-// correct
-final class CreateCourseSubmitDto extends BaseDto
+// correct — SubmitDto with fromRequest() mapping
+final class CreateCourseSubmitDto implements FromRequest
 {
     public function __construct(
         public readonly string $title,
         public readonly string $code,
     ) {}
+
+    public static function fromRequest(FormRequest $request): static
+    {
+        return new static(
+            title: $request->validated('title'),
+            code:  $request->validated('code'),
+        );
+    }
+}
+
+// correct — ResultDto as a plain final class
+final class CreateCourseResultDto implements ResultData
+{
+    public function __construct(
+        public readonly int    $id,
+        public readonly string $title,
+    ) {}
 }
 
 // wrong — business logic in a DTO
-final class CreateCourseSubmitDto extends BaseDto
+final class CreateCourseSubmitDto implements FromRequest
 {
     public function isValid(): bool
     {
@@ -159,15 +182,17 @@ FormRequests handle HTTP validation only. They are the boundary between raw HTTP
 **A FormRequest must:**
 - Extend `Illuminate\Foundation\Http\FormRequest`
 - Implement `rules()` for validation
-- Implement `toDto()` to map validated data to a Submit DTO
+- Implement `toDto()` to produce a Submit DTO
 
 **A FormRequest must not:**
 - Contain business logic
 - Query the database (except for existence validation rules)
 - Know anything about what the Action does with the data
 
+Two valid mapping strategies for `toDto()`:
+
 ```php
-// correct
+// request mapping — Request constructs the DTO inline
 final class CreateCourseRequest extends FormRequest
 {
     public function rules(): array
@@ -186,7 +211,20 @@ final class CreateCourseRequest extends FormRequest
         );
     }
 }
+
+// dto mapping — DTO is responsible for mapping itself
+final class CreateCourseRequest extends FormRequest
+{
+    public function rules(): array { /* ... */ }
+
+    public function toDto(): CreateCourseSubmitDto
+    {
+        return CreateCourseSubmitDto::fromRequest($this);
+    }
+}
 ```
+
+Use `make:action-request --mapping=request` (default) or `--mapping=dto` to generate either form.
 
 ---
 
@@ -196,12 +234,12 @@ Resources and ViewModels are presentation adapters. They transform a Result DTO 
 
 **A Resource must:**
 - Extend `App\Http\Resources\BaseResource`
-- Accept a Result DTO, not an Eloquent model
+- Receive a Result DTO via `$this->resource`, never an Eloquent model
 - Be used for API (JSON) responses
 
 **A ViewModel must:**
 - Extend `App\Http\ViewModels\BaseViewModel`
-- Accept a Result DTO via the constructor
+- Access the Result DTO via `$this->data`
 - Implement `toArray()` to return view data
 - Be used for Blade responses
 
@@ -211,7 +249,7 @@ Resources and ViewModels are presentation adapters. They transform a Result DTO 
 - Make database queries
 
 ```php
-// correct
+// correct — API Resource
 final class CourseResource extends BaseResource
 {
     public function toArray(Request $request): array
@@ -223,18 +261,19 @@ final class CourseResource extends BaseResource
     }
 }
 
-// wrong — accessing a model directly
+// wrong — database query inside a Resource
 final class CourseResource extends BaseResource
 {
     public function toArray(Request $request): array
     {
         return [
-            'id'           => $this->resource->id,
-            'student_count' => $this->resource->students()->count(), // database query
+            'student_count' => $this->resource->students()->count(), // not allowed
         ];
     }
 }
 ```
+
+Use `make:action-resource` for an API Resource or `make:action-resource --type=web` for a ViewModel.
 
 ---
 
@@ -281,7 +320,7 @@ final class CourseExpiredException extends \Exception
 
 ## Logging
 
-Logging must always go through the `ActivityLoggerInterface` contract. Never use Laravel's `Log` facade or `logger()` helper directly in business code.
+Logging must always go through the `AppLogger` contract. Never use Laravel's `Log` facade or `logger()` helper directly in business code.
 
 **The logger may be used in:**
 - Actions (for significant business events)
@@ -297,7 +336,7 @@ Logging must always go through the `ActivityLoggerInterface` contract. Never use
 final class EnrollStudentAction extends Action
 {
     public function __construct(
-        private readonly ActivityLoggerInterface $logger,
+        private readonly AppLogger $logger,
     ) {}
 
     public function execute(EnrollStudentSubmitDto $dto): EnrollmentResultDto
@@ -319,6 +358,8 @@ final class EnrollStudentAction extends Action
 }
 ```
 
+The default implementation is `DatabaseLogger`, bound to `AppLogger` in `AppServiceProvider`. Swap it by rebinding in your own provider.
+
 ---
 
 ## Anti-patterns
@@ -331,7 +372,7 @@ These patterns are explicitly forbidden in Antroly applications.
 
 **Logic in DTOs** — DTOs are data containers. Validation, transformation, and computation belong in Actions or FormRequests.
 
-**Direct Eloquent in Resources** — Resources receive a Result DTO. Querying the database inside a Resource creates N+1 problems and breaks the pipeline.
+**Direct Eloquent in Resources** — Resources must receive a Result DTO. Querying the database inside a Resource creates N+1 problems and breaks the pipeline.
 
 **Bypassing the pipeline** — calling Eloquent directly in a controller, or calling a FormRequest from an Action, breaks the separation of concerns the architecture depends on.
 
@@ -354,4 +395,4 @@ These patterns are explicitly forbidden in Antroly applications.
 | API response | `Resource` | Format ResultDto as JSON |
 | Web response | `ViewModel` | Format ResultDto for Blade |
 | Business errors | `DomainException` | Signal expected failures |
-| Activity logging | `ActivityLoggerInterface` | Record significant events |
+| Application logging | `AppLogger` | Record significant events |

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Antroly\Foundation\Logging;
+namespace Antroly\Foundation\Logging\Contracts;
 
 /**
  * Package-owned logging contract.

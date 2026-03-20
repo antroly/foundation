@@ -8,13 +8,15 @@ Every request follows a single pipeline:
 FormRequest → SubmitDto → Action → ResultDto → Resource / ViewModel
 ```
 
+Each step is mandatory — the pipeline must not be skipped.
+
 ---
 
 ## How it works
 
-`antroly/foundation` is a **dev dependency**. It does not ship runtime classes into your application — instead, it publishes them directly into your project.
+`antroly/foundation` is a **dev dependency**. It publishes architecture classes, contracts, and scaffolding into your application. Once published, **you own the code**. Modify the base classes freely to fit your application's needs.
 
-Once published, **you own the code**. Modify the base classes freely to fit your application's needs. The package remains as a dev dependency only to provide scaffolding commands and architecture testing helpers.
+After publishing, your application is fully independent. The Antroly package can be removed without breaking your application.
 
 ---
 
@@ -22,41 +24,10 @@ Once published, **you own the code**. Modify the base classes freely to fit your
 
 ```bash
 composer require antroly/foundation --dev
+php artisan antroly:install
 ```
 
-Publish the base classes:
-
-```bash
-php artisan vendor:publish --tag=antroly-foundation
-```
-
-Publish the migration:
-
-```bash
-php artisan vendor:publish --tag=antroly-migrations
-php artisan migrate
-```
-
-Publish the architecture test:
-
-```bash
-php artisan vendor:publish --tag=antroly-tests
-```
-
-Register in `bootstrap/app.php`:
-
-```php
-use App\Exceptions\AppExceptionHandler;
-use App\Providers\AppServiceProvider;
-use Illuminate\Foundation\Configuration\Exceptions;
-
-->withProviders([
-    AppServiceProvider::class,
-])
-->withExceptions(function (Exceptions $exceptions) {
-    AppExceptionHandler::register($exceptions);
-})
-```
+The installer publishes all base classes, wires the service provider, and optionally publishes the migration. Follow the printed next steps to register `AppServiceProvider` and `AppExceptionHandler` in `bootstrap/app.php`.
 
 ---
 
@@ -90,19 +61,44 @@ CreateCourseAction::run($dto);
 
 ---
 
-### `app/Dtos/BaseDto.php`
+### DTOs
 
-Base class for Submit DTOs and Result DTOs. DTOs hold typed data only — no HTTP logic, no persistence.
+DTOs are plain `final` classes with no base class. They carry typed input into Actions and typed output out of them.
+
+**SubmitDto** — implements `App\Contracts\Dto\FromRequest` (optional), carries validated HTTP input to the Action:
 
 ```php
-final class CreateCourseSubmitDto extends BaseDto
+final class CreateCourseSubmitDto implements FromRequest
 {
     public function __construct(
         public readonly string $title,
         public readonly string $code,
     ) {}
+
+    public static function fromRequest(FormRequest $request): static
+    {
+        return new static(
+            title: $request->validated('title'),
+            code:  $request->validated('code'),
+        );
+    }
 }
 ```
+
+**ResultDto** — implements `App\Contracts\Dto\ResultData` (optional), carries typed output from the Action:
+
+```php
+final class CreateCourseResultDto implements ResultData
+{
+    public function __construct(
+        public readonly int    $id,
+        public readonly string $title,
+        public readonly string $code,
+    ) {}
+}
+```
+
+These interfaces are optional and used when that behavior is needed.
 
 ---
 
@@ -142,7 +138,7 @@ Provides `toApiError()`, `handleException()`, and `buildRuleBasedErrorBags()` us
 
 ### `app/Http/Resources/BaseResource.php`
 
-API responses extend `BaseResource`. Resources receive Result DTOs, not Eloquent models.
+API responses extend `BaseResource`. Resources must receive Result DTOs, never Eloquent models.
 
 ```php
 final class CourseResource extends BaseResource
@@ -161,7 +157,7 @@ final class CourseResource extends BaseResource
 
 ### `app/Http/ViewModels/BaseViewModel.php`
 
-For Blade applications. ViewModels convert Result DTOs into view data.
+For Blade applications. ViewModels convert Result DTOs into view data via `$this->data`.
 
 ```php
 final class CourseViewModel extends BaseViewModel
@@ -169,7 +165,7 @@ final class CourseViewModel extends BaseViewModel
     public function toArray(): array
     {
         return [
-            'title' => $this->dto->title,
+            'title' => $this->data->title,
         ];
     }
 }
@@ -203,15 +199,15 @@ Both return the same envelope structure:
 
 ---
 
-### `app/Logging/Contracts/ActivityLoggerInterface.php`
+### `app/Logging/Contracts/AppLogger.php`
 
-Contract for activity logging. Inject this wherever logging is needed — never depend on a concrete logger directly.
+Contract for application logging. Inject this wherever logging is needed — never depend on the concrete logger or Laravel's `Log` facade directly.
 
 ---
 
-### `app/Logging/ActivityLogger.php`
+### `app/Logging/DatabaseLogger.php`
 
-Default implementation writing to the `logs` database table. Bound to `ActivityLoggerInterface` in `AppServiceProvider`. Swap it by rebinding in your own provider.
+Default implementation writing to the `logs` database table. Bound to `AppLogger` in `AppServiceProvider`. Swap it by rebinding in your own provider.
 
 ---
 
@@ -223,7 +219,7 @@ Eloquent model for the `logs` table. Immutable — no `updated_at`.
 
 ### `app/Providers/AppServiceProvider.php`
 
-Wires `ResponseMacros` and binds `ActivityLoggerInterface` to `ActivityLogger`. Register this in `bootstrap/app.php`.
+Wires `ResponseMacros` and binds `AppLogger` to `DatabaseLogger`. Register this in `bootstrap/app.php`.
 
 ---
 
@@ -231,7 +227,7 @@ Wires `ResponseMacros` and binds `ActivityLoggerInterface` to `ActivityLogger`. 
 
 ### `make:action`
 
-Generates an Action with a Submit DTO and a Result DTO, grouped by domain:
+Generates an Action with a SubmitDto and a ResultDto, grouped by domain:
 
 ```bash
 php artisan make:action Course/CreateCourse
@@ -246,13 +242,22 @@ app/Dtos/Course/CreateCourseResultDto.php
 
 ---
 
-### `make:antroly-request`
+### `make:action-request`
 
-Generates a `FormRequest` with a `toDto()` method pre-wired to the Submit DTO:
+Generates a `FormRequest` with a `toDto()` method. Supports two mapping strategies:
 
 ```bash
-php artisan make:antroly-request Course/CreateCourseRequest
+# Request maps to DTO (default)
+php artisan make:action-request Course/CreateCourse
+
+# DTO maps itself via fromRequest()
+php artisan make:action-request Course/CreateCourse --mapping=dto
 ```
+
+| Flag | Behavior |
+|------|----------|
+| `--mapping=request` (default) | Request constructs the DTO inline via `new SubmitDto(...)` |
+| `--mapping=dto` | Request delegates to `SubmitDto::fromRequest($this)` |
 
 Generates:
 ```
@@ -261,19 +266,27 @@ app/Http/Requests/Course/CreateCourseRequest.php
 
 ---
 
-### `make:antroly-resource`
+### `make:action-resource`
 
-Generates an API `Resource` (default) or a `ViewModel` for Blade (`--web`):
+Generates an API `Resource` (default) or a `ViewModel` for Blade:
 
 ```bash
-php artisan make:antroly-resource Course/CourseResource
-php artisan make:antroly-resource Course/CourseViewModel --web
+# API Resource (default)
+php artisan make:action-resource Course/CreateCourse
+
+# ViewModel for Blade
+php artisan make:action-resource Course/CreateCourse --type=web
 ```
+
+| Flag | Output |
+|------|--------|
+| `--type=api` (default) | `CreateCourseResource` extending `BaseResource` |
+| `--type=web` | `CreateCourseViewModel` extending `BaseViewModel` |
 
 Generates:
 ```
-app/Http/Resources/Course/CourseResource.php
-app/Http/ViewModels/Course/CourseViewModel.php
+app/Http/Resources/Course/CreateCourseResource.php
+app/Http/ViewModels/Course/CreateCourseViewModel.php
 ```
 
 ---
@@ -293,9 +306,62 @@ app/Exceptions/Course/CourseExpiredException.php
 
 ---
 
+## Example flow
+
+A complete request cycle for a JSON API endpoint:
+
+```php
+// 1. Controller — thin HTTP adapter
+final class CourseController extends BaseController
+{
+    public function store(CreateCourseRequest $request): JsonResponse
+    {
+        $result = CreateCourseAction::run($request->toDto());
+
+        return response()->success(201, new CourseResource($result));
+    }
+}
+
+// 2. Request — validates and maps to SubmitDto
+final class CreateCourseRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return ['title' => ['required', 'string', 'max:255']];
+    }
+
+    public function toDto(): CreateCourseSubmitDto
+    {
+        return new CreateCourseSubmitDto(title: $this->validated('title'));
+    }
+}
+
+// 3. Action — business logic only
+final class CreateCourseAction extends Action
+{
+    public function execute(CreateCourseSubmitDto $dto): CreateCourseResultDto
+    {
+        $course = Course::create(['title' => $dto->title]);
+
+        return new CreateCourseResultDto(id: $course->id, title: $course->title);
+    }
+}
+
+// 4. Resource — formats ResultDto as JSON
+final class CourseResource extends BaseResource
+{
+    public function toArray(Request $request): array
+    {
+        return ['id' => $this->resource->id, 'title' => $this->resource->title];
+    }
+}
+```
+
+---
+
 ## Architecture tests
 
-Publishing `antroly-tests` adds `tests/ArchitectureTest.php` to your project. Run it as part of your normal Pest suite:
+Publishing `antroly-tests` adds `tests/Architecture/ArchitectureTest.php` to your project. Run it as part of your normal Pest suite:
 
 ```bash
 ./vendor/bin/pest
@@ -303,10 +369,11 @@ Publishing `antroly-tests` adds `tests/ArchitectureTest.php` to your project. Ru
 
 Enforces:
 - Actions extend `Action` and do not return Eloquent models
-- DTOs extend `BaseDto` and do not depend on Eloquent
+- DTOs are `final` and do not depend on Eloquent
 - Resources extend `BaseResource` and do not depend on Eloquent
 - Controllers do not use Eloquent directly
 - ViewModels extend `BaseViewModel`
+- Domain exceptions extend `DomainException` and are `final`
 
 See [RULEBOOK.md](RULEBOOK.md) for the full architectural guidelines.
 
@@ -314,7 +381,7 @@ See [RULEBOOK.md](RULEBOOK.md) for the full architectural guidelines.
 
 ## What Antroly does not include
 
-Intentionally absent: repository layers, generic service interfaces, command buses, DTO auto-hydration frameworks, complex transformer layers. Actions interact directly with Eloquent. That's enough.
+Intentionally absent: repository layers, generic service interfaces, command buses, DTO auto-hydration frameworks, complex transformer layers. Actions interact directly with Eloquent. That is sufficient.
 
 ---
 

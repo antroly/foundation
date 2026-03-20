@@ -35,7 +35,7 @@ describe('FoundationServiceProvider', function () {
 
         expect($publishedFiles)
             ->toContain('Action.php')
-            ->toContain('BuildsFromRequest.php')
+            ->toContain('FromRequest.php')
             ->toContain('ResultData.php')
             ->toContain('HasErrorCodeInterface.php')
             ->toContain('DomainException.php')

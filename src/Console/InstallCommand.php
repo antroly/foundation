@@ -11,11 +11,11 @@ use Symfony\Component\Console\Attribute\AsCommand;
 class InstallCommand extends Command
 {
     protected $signature   = 'antroly:install';
-    protected $description = 'Install the Antroly Foundation into your Laravel application';
+    protected $description = 'Install Antroly into your Laravel application';
 
     public function handle(): int
     {
-        $this->components->info('Installing Antroly Foundation...');
+        $this->components->info('Installing Antroly...');
         $this->newLine();
 
         $this->components->task('Publishing foundation stubs', function () {
@@ -33,7 +33,7 @@ class InstallCommand extends Command
         }
 
         $this->newLine();
-        $this->components->info('Antroly Foundation installed successfully.');
+        $this->components->info('Antroly installed successfully.');
         $this->newLine();
         $this->line('  <fg=gray>Next steps:</>');
         $this->newLine();

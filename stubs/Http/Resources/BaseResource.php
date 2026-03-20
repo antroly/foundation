@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
-use App\Contracts\Dto\ResultData;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 abstract class BaseResource extends JsonResource
 {
     /**
-     * BaseResource accepts a ResultData DTO, not an Eloquent model.
-     * Pipeline: Action -> ResultData -> Resource.
+     * Intentionally accepts mixed — the strict type hint fights Laravel internals.
+     * Convention: always pass a ResultData DTO. Pipeline: Action → ResultData → Resource.
+     * Enforce the boundary via architecture tests, not the constructor.
      */
-    public function __construct(ResultData $resource)
+    public function __construct(mixed $resource)
     {
         parent::__construct($resource);
     }

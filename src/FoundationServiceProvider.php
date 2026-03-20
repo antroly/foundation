@@ -6,6 +6,9 @@ namespace Antroly\Foundation;
 
 use Antroly\Foundation\Console\InstallCommand;
 use Antroly\Foundation\Console\MakeActionCommand;
+use Antroly\Foundation\Console\MakeExceptionCommand;
+use Antroly\Foundation\Console\MakeActionRequestCommand;
+use Antroly\Foundation\Console\MakeActionResourceCommand;
 use Illuminate\Support\ServiceProvider;
 
 class FoundationServiceProvider extends ServiceProvider
@@ -25,7 +28,7 @@ class FoundationServiceProvider extends ServiceProvider
             // Actions
             __DIR__ . '/../stubs/Actions/Action.php'                             => app_path('Actions/Action.php'),
             // Contracts - DTO boundaries
-            __DIR__ . '/../stubs/Contracts/Dto/BuildsFromRequest.php'            => app_path('Contracts/Dto/BuildsFromRequest.php'),
+            __DIR__ . '/../stubs/Contracts/Dto/FromRequest.php'                   => app_path('Contracts/Dto/FromRequest.php'),
             __DIR__ . '/../stubs/Contracts/Dto/ResultData.php'                   => app_path('Contracts/Dto/ResultData.php'),
             // Contracts - exceptions
             __DIR__ . '/../stubs/Contracts/Exceptions/HasErrorCodeInterface.php' => app_path('Contracts/Exceptions/HasErrorCodeInterface.php'),
@@ -61,6 +64,9 @@ class FoundationServiceProvider extends ServiceProvider
         $this->commands([
             InstallCommand::class,
             MakeActionCommand::class,
+            MakeExceptionCommand::class,
+            MakeActionRequestCommand::class,
+            MakeActionResourceCommand::class,
         ]);
     }
 }

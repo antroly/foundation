@@ -12,7 +12,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * Every SubmitDto must provide its own fromRequest() implementation.
  * Convention: $dto = CreateCourseSubmitDto::fromRequest($request);
  */
-interface BuildsFromRequest
+interface FromRequest
 {
     public static function fromRequest(FormRequest $request): static;
 }

@@ -3,6 +3,9 @@ parameters:
     paths:
         - src
         - stubs
+    excludePaths:
+        # Published test stub — contains Pest arch DSL that PHPStan cannot analyse
+        - stubs/Tests
     ignoreErrors:
         # Eloquent magic static methods (create, find, etc.)
         - '#Call to an undefined static method .+::create\(\)#'
