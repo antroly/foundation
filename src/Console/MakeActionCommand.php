@@ -12,7 +12,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 class MakeActionCommand extends Command
 {
     protected $signature   = 'make:action {name : The action name, e.g. Course/CreateCourse}';
-    protected $description = 'Create a new Action with SubmitDto and ResultDto';
+    protected $description = 'Create a new Action with a test';
 
     public function handle(): int
     {
@@ -21,8 +21,7 @@ class MakeActionCommand extends Command
         [$domain, $action] = $this->parseName($name);
 
         $this->generateAction($domain, $action);
-        $this->generateSubmitDto($domain, $action);
-        $this->generateResultDto($domain, $action);
+        $this->generateTest($domain, $action);
 
         return self::SUCCESS;
     }
@@ -44,10 +43,7 @@ class MakeActionCommand extends Command
     private function generateAction(string $domain, string $action): void
     {
         $className = "{$action}Action";
-        $submitDto = "{$action}SubmitDto";
-        $resultDto = "{$action}ResultDto";
         $namespace = "App\\Actions\\{$domain}";
-        $dtoNs     = "App\\Dtos\\{$domain}";
         $path      = app_path("Actions/{$domain}/{$className}.php");
 
         $content = <<<PHP
@@ -58,12 +54,10 @@ class MakeActionCommand extends Command
         namespace {$namespace};
 
         use App\Actions\Action;
-        use {$dtoNs}\\{$submitDto};
-        use {$dtoNs}\\{$resultDto};
 
         final class {$className} extends Action
         {
-            public function execute({$submitDto} \$dto): {$resultDto}
+            public function execute(): mixed
             {
                 // TODO: implement
             }
@@ -74,66 +68,28 @@ class MakeActionCommand extends Command
         $this->components->info("Action [{$path}] created successfully.");
     }
 
-    private function generateSubmitDto(string $domain, string $action): void
+    private function generateTest(string $domain, string $action): void
     {
-        $className = "{$action}SubmitDto";
-        $namespace = "App\\Dtos\\{$domain}";
-        $path      = app_path("Dtos/{$domain}/{$className}.php");
+        $className = "{$action}Action";
+        $namespace = "App\\Actions\\{$domain}";
+        $path      = base_path("tests/Unit/Actions/{$domain}/{$className}Test.php");
 
         $content = <<<PHP
         <?php
 
         declare(strict_types=1);
 
-        namespace {$namespace};
+        use {$namespace}\\{$className};
 
-        use App\Contracts\Dto\FromRequest;
-        use Illuminate\Foundation\Http\FormRequest;
-
-        final class {$className} implements FromRequest
-        {
-            public function __construct(
-                // TODO: add typed properties
-            ) {}
-
-            public static function fromRequest(FormRequest \$request): static
-            {
-                return new static(
-                    // TODO: map validated fields
-                );
-            }
-        }
+        describe('{$className}', function () {
+            it('executes', function () {
+                //
+            });
+        });
         PHP;
 
         $this->writeFile($path, $content);
-        $this->components->info("SubmitDto [{$path}] created successfully.");
-    }
-
-    private function generateResultDto(string $domain, string $action): void
-    {
-        $className = "{$action}ResultDto";
-        $namespace = "App\\Dtos\\{$domain}";
-        $path      = app_path("Dtos/{$domain}/{$className}.php");
-
-        $content = <<<PHP
-        <?php
-
-        declare(strict_types=1);
-
-        namespace {$namespace};
-
-        use App\Contracts\Dto\ResultData;
-
-        final class {$className} implements ResultData
-        {
-            public function __construct(
-                // TODO: add typed properties
-            ) {}
-        }
-        PHP;
-
-        $this->writeFile($path, $content);
-        $this->components->info("ResultDto [{$path}] created successfully.");
+        $this->components->info("Test [{$path}] created successfully.");
     }
 
     private function writeFile(string $path, string $content): void
