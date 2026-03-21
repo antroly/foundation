@@ -35,7 +35,9 @@ The installer publishes all base classes, wires the service provider, and option
 
 ### `app/Actions/Action.php`
 
-Base class for all use cases. Resolved via the container — constructor dependencies are injected automatically.
+Base class for all use cases. Each Action represents a single application use case and owns the full flow for it.
+
+Every Action is `final`, exposes one public method `execute()`, and is dispatched via `::run($dto)` — which resolves the Action from the container and injects constructor dependencies automatically.
 
 ```php
 final class CreateCourseAction extends Action
@@ -55,7 +57,6 @@ final class CreateCourseAction extends Action
     }
 }
 
-// Dispatch via static helper
 CreateCourseAction::run($dto);
 ```
 
@@ -227,7 +228,7 @@ Wires `ResponseMacros` and binds `AppLogger` to `DatabaseLogger`. Register this 
 
 ### `make:action`
 
-Generates an Action with a SubmitDto and a ResultDto, grouped by domain:
+Generates an Action and its test, grouped by domain:
 
 ```bash
 php artisan make:action Course/CreateCourse
@@ -236,9 +237,32 @@ php artisan make:action Course/CreateCourse
 Generates:
 ```
 app/Actions/Course/CreateCourseAction.php
+tests/Unit/Actions/Course/CreateCourseActionTest.php
+```
+
+---
+
+### `make:dto`
+
+Generates a SubmitDto or ResultDto independently:
+
+```bash
+php artisan make:dto Course/CreateCourse --type=submit
+php artisan make:dto Course/CreateCourse --type=result
+```
+
+| Flag | Output |
+|------|--------|
+| `--type=submit` (default) | `CreateCourseSubmitDto` implementing `FromRequest` |
+| `--type=result` | `CreateCourseResultDto` implementing `ResultData` |
+
+Generates:
+```
 app/Dtos/Course/CreateCourseSubmitDto.php
 app/Dtos/Course/CreateCourseResultDto.php
 ```
+
+DTOs are generated separately because not every Action needs its own DTO pair — some Actions reuse an existing DTO, accept no input, or return a `CollectionResult` or `PaginatedResult` directly.
 
 ---
 
@@ -308,10 +332,10 @@ app/Exceptions/Course/CourseExpiredException.php
 
 ## Example flow
 
-A complete request cycle for a JSON API endpoint:
+### Create — single item
 
 ```php
-// 1. Controller — thin HTTP adapter
+// Controller
 final class CourseController extends BaseController
 {
     public function store(CreateCourseRequest $request): JsonResponse
@@ -322,7 +346,7 @@ final class CourseController extends BaseController
     }
 }
 
-// 2. Request — validates and maps to SubmitDto
+// Request — validates and maps to SubmitDto
 final class CreateCourseRequest extends FormRequest
 {
     public function rules(): array
@@ -336,7 +360,7 @@ final class CreateCourseRequest extends FormRequest
     }
 }
 
-// 3. Action — business logic only
+// Action
 final class CreateCourseAction extends Action
 {
     public function execute(CreateCourseSubmitDto $dto): CreateCourseResultDto
@@ -347,7 +371,7 @@ final class CreateCourseAction extends Action
     }
 }
 
-// 4. Resource — formats ResultDto as JSON
+// Resource
 final class CourseResource extends BaseResource
 {
     public function toArray(Request $request): array
@@ -356,6 +380,75 @@ final class CourseResource extends BaseResource
     }
 }
 ```
+
+---
+
+### List — paginated results
+
+```php
+// Controller
+final class CourseController extends BaseController
+{
+    public function index(ListCoursesRequest $request): JsonResponse
+    {
+        $result = ListCoursesAction::run($request->toDto());
+
+        return response()->success(200, [
+            'items'       => CourseListResource::collection($result->items),
+            'total'       => $result->total,
+            'perPage'     => $result->perPage,
+            'currentPage' => $result->currentPage,
+            'lastPage'    => $result->lastPage,
+        ]);
+    }
+}
+
+// Action — maps models to DTOs inside the Action, wraps pagination metadata
+final class ListCoursesAction extends Action
+{
+    public function execute(ListCoursesSubmitDto $dto): PaginatedResult
+    {
+        return PaginatedResult::fromPaginator(
+            paginator: Course::query()
+                ->with('instructor')
+                ->paginate($dto->perPage),
+            mapper: fn($course) => new CourseItemDto(
+                id:         $course->id,
+                title:      $course->title,
+                instructor: new InstructorDto(name: $course->instructor->name),
+            ),
+        );
+    }
+}
+```
+
+No paginator reaches the controller. No database query runs in the Resource.
+
+---
+
+### Nested DTOs
+
+Result DTOs may contain nested DTOs for related data:
+
+```php
+final class CourseItemDto implements ResultData
+{
+    public function __construct(
+        public readonly int          $id,
+        public readonly string       $title,
+        public readonly InstructorDto $instructor,
+    ) {}
+}
+
+final class InstructorDto implements ResultData
+{
+    public function __construct(
+        public readonly string $name,
+    ) {}
+}
+```
+
+All relations must be eager loaded in the Action before mapping. Nested DTOs must not trigger any database queries.
 
 ---
 
@@ -368,7 +461,7 @@ Publishing `antroly-tests` adds `tests/Architecture/ArchitectureTest.php` to you
 ```
 
 Enforces:
-- Actions extend `Action` and do not return Eloquent models
+- Actions extend `Action`, are `final`, and do not return Eloquent models or paginators
 - DTOs are `final` and do not depend on Eloquent
 - Resources extend `BaseResource` and do not depend on Eloquent
 - Controllers do not use Eloquent directly

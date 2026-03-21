@@ -19,6 +19,14 @@ arch('actions do not return Eloquent models')
     ->expect('App\Actions')
     ->not->toReturnInstances('Illuminate\Database\Eloquent\Model');
 
+arch('actions do not return paginators')
+    ->expect('App\Actions')
+    ->not->toReturnInstances('Illuminate\Contracts\Pagination\LengthAwarePaginator');
+
+arch('actions do not return abstract paginators')
+    ->expect('App\Actions')
+    ->not->toReturnInstances('Illuminate\Pagination\AbstractPaginator');
+
 // DTOs are plain data containers — final, no Eloquent.
 arch('dtos are final')
     ->expect('App\Dtos')

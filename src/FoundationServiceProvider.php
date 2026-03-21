@@ -9,6 +9,7 @@ use Antroly\Foundation\Console\MakeActionCommand;
 use Antroly\Foundation\Console\MakeExceptionCommand;
 use Antroly\Foundation\Console\MakeActionRequestCommand;
 use Antroly\Foundation\Console\MakeActionResourceCommand;
+use Antroly\Foundation\Console\MakeDtoCommand;
 use Illuminate\Support\ServiceProvider;
 
 class FoundationServiceProvider extends ServiceProvider
@@ -30,6 +31,9 @@ class FoundationServiceProvider extends ServiceProvider
             // Contracts - DTO boundaries
             __DIR__ . '/../stubs/Contracts/Dto/FromRequest.php'                   => app_path('Contracts/Dto/FromRequest.php'),
             __DIR__ . '/../stubs/Contracts/Dto/ResultData.php'                   => app_path('Contracts/Dto/ResultData.php'),
+            // Data — pipeline output wrappers
+            __DIR__ . '/../stubs/Data/CollectionResult.php'                      => app_path('Data/CollectionResult.php'),
+            __DIR__ . '/../stubs/Data/PaginatedResult.php'                       => app_path('Data/PaginatedResult.php'),
             // Contracts - exceptions
             __DIR__ . '/../stubs/Contracts/Exceptions/HasErrorCodeInterface.php' => app_path('Contracts/Exceptions/HasErrorCodeInterface.php'),
             // Exceptions
@@ -67,6 +71,7 @@ class FoundationServiceProvider extends ServiceProvider
             MakeExceptionCommand::class,
             MakeActionRequestCommand::class,
             MakeActionResourceCommand::class,
+            MakeDtoCommand::class,
         ]);
     }
 }

@@ -18,48 +18,55 @@ Each step is mandatory — the pipeline must not be skipped.
 
 ## Actions
 
-Actions are the only place where business logic lives.
+Actions represent a single application use case.
 
-**An Action must:**
-- Extend `App\Actions\Action`
-- Implement a single `execute()` method
-- Accept a typed Submit DTO as input
-- Return a typed Result DTO as output
-- Be `final`
+They are the primary boundary where business logic lives.
 
-**An Action may:**
-- Use Eloquent models to read and persist data
-- Call other Actions
-- Call Guards or Validators
-- Throw Domain Exceptions
-- Inject dependencies via the constructor
+### Structure
 
-**An Action must not:**
-- Return an Eloquent model
-- Accept an HTTP request object
-- Call `response()`, `redirect()`, or any HTTP helper
-- Contain presentation logic
-- Know whether the caller is an API or a web request
+An Action must:
+- extend `App\Actions\Action`
+- be `final`
+- implement exactly one public method: `execute()`
+- accept exactly one typed Submit DTO
+- return a typed Result DTO, `CollectionResult`, or `PaginatedResult`
+
+### An Action may:
+- query and persist Eloquent models
+- eager load required relations
+- define transaction boundaries
+- call Guards, Validators, calculators, or domain helpers/services
+- inject dependencies via the constructor
+- throw Domain Exceptions or Validation Exceptions
+- map loaded state into Result DTOs, `CollectionResult`s, or `PaginatedResult`s
+
+### An Action must:
+- keep the use-case flow explicit
+- load all required data before mapping output
+- return DTO-based output only
+
+### An Action must not:
+- accept a `Request` or `FormRequest`
+- return HTTP responses, redirects, or call HTTP helpers
+- contain presentation formatting
+- call other Actions
+- rely on lazy loading during DTO mapping
+
+### Delegation
+
+Actions may be large when the use case is large. Size alone is not a design problem.
+
+An Action may delegate focused sub-responsibilities when that improves clarity, reuse, testability, or isolates independently complex logic.
+
+Delegation does not change ownership: the Action still owns the use case.
+
+### Dispatching
 
 ```php
-// correct
-final class EnrollStudentAction extends Action
-{
-    public function execute(EnrollStudentSubmitDto $dto): EnrollmentResultDto
-    {
-        // business logic here
-    }
-}
-
-// wrong — returning a model
-final class EnrollStudentAction extends Action
-{
-    public function execute(EnrollStudentSubmitDto $dto): Enrollment
-    {
-        // ...
-    }
-}
+CreateCourseAction::run($dto);
 ```
+
+The static `run()` helper resolves the Action from the container and calls `execute()` internally.
 
 ---
 
@@ -124,6 +131,60 @@ final class CreateCourseSubmitDto implements FromRequest
     }
 }
 ```
+
+---
+
+## List and Pagination Output
+
+Actions must use typed output wrappers for list and paginated results. Raw arrays and bare paginators must not leave the Action boundary.
+
+| Result type | Return type |
+|---|---|
+| Single item | `ResultDto` |
+| Unordered/filtered list | `CollectionResult<ItemDto>` |
+| Paginated list | `PaginatedResult<ItemDto>` |
+
+### CollectionResult
+
+Wraps a list of already-mapped Result DTOs.
+
+```php
+return new CollectionResult(
+    items: $courses->map(fn($c) => new CourseItemDto(
+        id:    $c->id,
+        title: $c->title,
+    ))->all(),
+);
+```
+
+### PaginatedResult
+
+Wraps pagination metadata and a list of already-mapped Result DTOs.
+
+Use the `fromPaginator()` factory — it maps models → DTOs and extracts pagination metadata in one step:
+
+```php
+return PaginatedResult::fromPaginator(
+    paginator: Course::query()->paginate($dto->perPage),
+    mapper: fn($course) => new CourseItemDto(
+        id:    $course->id,
+        title: $course->title,
+    ),
+);
+```
+
+### Rules
+
+**An Action must not:**
+- return a raw `array` for a list result
+- return a `LengthAwarePaginator` or any paginator instance directly
+- perform DTO mapping inside a Resource or ViewModel
+
+**An Action must:**
+- map models → DTOs before constructing the wrapper
+- ensure DTO construction does not trigger lazy loading
+
+The arch test enforces the paginator leakage rule automatically.
 
 ---
 
@@ -228,6 +289,70 @@ Use `make:action-request --mapping=request` (default) or `--mapping=dto` to gene
 
 ---
 
+## Validation
+
+Antroly separates validation into two distinct layers that must not be mixed.
+
+### Transport validation — FormRequest
+
+The FormRequest validates that the incoming HTTP input is structurally correct and safe to process. This layer runs before the Action.
+
+**Allowed in FormRequest:**
+- field presence, type, format, and length rules
+- uniqueness and existence checks against the database
+- authorization via `authorize()`
+
+**Not allowed in FormRequest:**
+- business rules (those belong in the Action)
+
+### Business validation — Action
+
+Business rules are enforced inside the Action. When a rule is violated, the Action throws a `DomainException`.
+
+```php
+// wrong — business rule in FormRequest
+public function rules(): array
+{
+    return [
+        'course_id' => ['required', Rule::exists('courses')->where('status', 'active')],
+        // checking enrollment capacity here is wrong — that is a business rule
+    ];
+}
+
+// correct — business rule in Action
+public function execute(EnrollStudentSubmitDto $dto): EnrollStudentResultDto
+{
+    $course = Course::query()->findOrFail($dto->courseId);
+
+    if ($course->isFull()) {
+        throw new CourseFullException();
+    }
+
+    // ...
+}
+```
+
+### Extracted validators and guards
+
+Business validation may be extracted into dedicated `Guard` or `Validator` classes when it is complex enough to warrant isolation. This is not required — simple checks may live inline in the Action.
+
+```php
+// allowed — extracted guard
+final class EnrollmentCapacityGuard
+{
+    public function ensure(Course $course): void
+    {
+        if ($course->isFull()) {
+            throw new CourseFullException();
+        }
+    }
+}
+```
+
+The Action remains the orchestrator and owner of the use case regardless of extraction.
+
+---
+
 ## Resources and ViewModels
 
 Resources and ViewModels are presentation adapters. They transform a Result DTO into a format suitable for the response.
@@ -274,6 +399,59 @@ final class CourseResource extends BaseResource
 ```
 
 Use `make:action-resource` for an API Resource or `make:action-resource --type=web` for a ViewModel.
+
+---
+
+## Data loading
+
+All data required by an Action must be loaded inside the Action before DTO mapping begins. DTO construction must not trigger database queries.
+
+### Eager loading
+
+Load all required relations explicitly. Do not rely on Laravel's lazy loading.
+
+```php
+// correct
+$course = Course::query()
+    ->with(['instructor', 'enrollments'])
+    ->findOrFail($dto->courseId);
+
+return new CourseResultDto(
+    id:          $course->id,
+    instructor:  new InstructorDto(name: $course->instructor->name),
+    enrollment:  $course->enrollments->count(),
+);
+
+// wrong — lazy loading triggered during DTO mapping
+$course = Course::query()->findOrFail($dto->courseId);
+
+return new CourseResultDto(
+    instructor: new InstructorDto(name: $course->instructor->name), // N+1
+);
+```
+
+### Model::preventLazyLoading()
+
+Enable lazy loading prevention in non-production environments to catch violations at development time:
+
+```php
+// AppServiceProvider
+Model::preventLazyLoading(! app()->isProduction());
+```
+
+### Rules
+
+**An Action must:**
+- eager load all relations required for DTO mapping
+- complete all data loading before constructing any DTO
+
+**Resources and ViewModels must not:**
+- access Eloquent relations
+- trigger any database queries (enforced by the arch test)
+
+**DTOs must not:**
+- contain Eloquent models as properties
+- perform queries in constructors or factory methods
 
 ---
 
@@ -362,6 +540,54 @@ The default implementation is `DatabaseLogger`, bound to `AppLogger` in `AppServ
 
 ---
 
+## Non-HTTP entry points
+
+Actions are not HTTP-only. Jobs, listeners, console commands, and scheduled tasks must also delegate business logic to Actions.
+
+The `FromRequest` contract is exclusively for HTTP-boundary DTOs. Non-HTTP callers construct SubmitDtos directly from their own data.
+
+```php
+// Job — constructs SubmitDto from job payload
+final class ProcessEnrollmentJob implements ShouldQueue
+{
+    public function __construct(
+        private readonly int $courseId,
+        private readonly int $studentId,
+    ) {}
+
+    public function handle(): void
+    {
+        $dto = new EnrollStudentSubmitDto(
+            courseId:  $this->courseId,
+            studentId: $this->studentId,
+        );
+
+        EnrollStudentAction::run($dto);
+    }
+}
+
+// Console command — constructs SubmitDto from input arguments
+final class ExpireCoursesCommand extends Command
+{
+    public function handle(): void
+    {
+        $dto = new ExpireCoursesSubmitDto(
+            before: now()->subMonths(6),
+        );
+
+        ExpireCoursesAction::run($dto);
+    }
+}
+```
+
+**Rules:**
+
+- Jobs, listeners, and commands must not contain business logic — delegate to Actions
+- `FromRequest` must not be implemented by DTOs used outside HTTP contexts
+- Actions must not know or care about whether the caller is HTTP, a job, a command, or a listener
+
+---
+
 ## Anti-patterns
 
 These patterns are explicitly forbidden in Antroly applications.
@@ -381,6 +607,40 @@ These patterns are explicitly forbidden in Antroly applications.
 **Repository layers** — Laravel's Eloquent is already a repository. Adding another abstraction on top adds complexity without value.
 
 **Catching exceptions in Actions** — Actions should throw, not catch. Exception handling belongs in the exception handler, not in business logic.
+
+---
+
+## Hard rules vs preferred defaults
+
+Some rules in Antroly are absolute and enforced by arch tests or code constraints. Others are strong defaults that may be adjusted in specific circumstances.
+
+### Hard rules — never break these
+
+| Rule | Enforcement |
+|---|---|
+| Actions extend `App\Actions\Action` | Arch test |
+| Actions are `final` | Arch test |
+| Actions must not return Eloquent models | Arch test |
+| Actions must not return paginators directly | Arch test |
+| DTOs are `final` | Arch test |
+| DTOs must not depend on Eloquent | Arch test |
+| Resources must not query the database | Arch test |
+| ViewModels must not query the database | Arch test |
+| Controllers must not query the database | Arch test |
+| Domain exceptions extend `DomainException` and are `final` | Arch test |
+| Actions must not call other Actions | Convention |
+| Actions must not accept `Request` / `FormRequest` | Convention |
+| Actions must not return HTTP responses | Convention |
+
+### Preferred defaults — strong but adjustable
+
+| Default | When to deviate |
+|---|---|
+| Pipeline SubmitDtos implement `FromRequest` | Non-HTTP entry points construct DTOs directly — `FromRequest` is HTTP-only |
+| Pipeline ResultDtos implement `ResultData` | Acceptable to skip for simple internal DTOs not passing through Resources |
+| `Action::run($dto)` as the dispatch path | Direct `app(Action::class)->execute($dto)` is valid but less idiomatic |
+| Guards / Validators as extracted classes | Simple business checks may live inline in the Action |
+| `Model::preventLazyLoading()` in non-production | Some teams use other N+1 detection approaches |
 
 ---
 
