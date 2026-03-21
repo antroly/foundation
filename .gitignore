@@ -3,3 +3,15 @@
 .phpunit.result.cache
 .php-cs-fixer.cache
 sync.sh
+
+# Claude Code
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
