@@ -27,7 +27,7 @@ composer require antroly/foundation --dev
 php artisan antroly:install
 ```
 
-The installer publishes all base classes, wires the service provider, and optionally publishes the migration. Follow the printed next steps to register `AppServiceProvider` and `AppExceptionHandler` in `bootstrap/app.php`.
+The installer publishes all base classes and optionally publishes the migration. Follow the printed next steps to register `AppServiceProvider` and `AppExceptionHandler` in `bootstrap/app.php`.
 
 ---
 
@@ -327,6 +327,22 @@ Generates:
 ```
 app/Exceptions/Course/CourseExpiredException.php
 ```
+
+---
+
+## Scaffolding workflow
+
+Run these commands in sequence to scaffold a complete feature:
+
+```bash
+php artisan make:action Course/CreateCourse
+php artisan make:dto Course/CreateCourse --type=submit
+php artisan make:dto Course/CreateCourse --type=result
+php artisan make:action-request Course/CreateCourse --mapping=request
+php artisan make:action-resource Course/CreateCourse --type=api
+```
+
+This generates the full pipeline — Action, both DTOs, FormRequest, and API Resource — ready for your business logic.
 
 ---
 

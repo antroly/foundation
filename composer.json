@@ -2,7 +2,7 @@
     "name": "antroly/foundation",
     "description": "Core package powering the Antroly architecture system for Laravel.",
     "type": "library",
-    "version": "0.2.1",
+    "version": "1.0.0",
     "license": "MIT",
     "keywords": ["laravel", "architecture", "actions", "dto", "antroly"],
     "authors": [

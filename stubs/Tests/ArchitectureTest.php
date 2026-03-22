@@ -27,6 +27,17 @@ arch('actions do not return abstract paginators')
     ->expect('App\Actions')
     ->not->toReturnInstances('Illuminate\Pagination\AbstractPaginator');
 
+arch('actions do not depend on Request or FormRequest')
+    ->expect('App\Actions')
+    ->not->toUse('Illuminate\Http\Request')
+    ->not->toUse('Illuminate\Foundation\Http\FormRequest');
+
+arch('actions do not return HTTP responses')
+    ->expect('App\Actions')
+    ->not->toReturnInstances('Illuminate\Http\JsonResponse')
+    ->not->toReturnInstances('Illuminate\Http\Response')
+    ->not->toReturnInstances('Symfony\Component\HttpFoundation\Response');
+
 // DTOs are plain data containers — final, no Eloquent.
 arch('dtos are final')
     ->expect('App\Dtos')

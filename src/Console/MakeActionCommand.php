@@ -18,6 +18,14 @@ class MakeActionCommand extends Command
     {
         $name = $this->argument('name');
         assert(is_string($name));
+
+        if (! str_contains($name, '/')) {
+            $this->components->error('Action name must include a domain. Use: make:action Domain/ActionName');
+            $this->components->info('Example: php artisan make:action Course/CreateCourse');
+
+            return self::FAILURE;
+        }
+
         [$domain, $action] = $this->parseName($name);
 
         $this->generateAction($domain, $action);
@@ -29,15 +37,9 @@ class MakeActionCommand extends Command
     /** @return array{string, string} */
     private function parseName(string $name): array
     {
-        if (str_contains($name, '/')) {
-            [$domain, $action] = explode('/', $name, 2);
+        [$domain, $action] = explode('/', $name, 2);
 
-            return [Str::studly($domain), Str::studly($action)];
-        }
-
-        $action = Str::studly($name);
-
-        return [$action, $action];
+        return [Str::studly($domain), Str::studly($action)];
     }
 
     private function generateAction(string $domain, string $action): void
@@ -57,7 +59,7 @@ class MakeActionCommand extends Command
 
         final class {$className} extends Action
         {
-            public function execute(): mixed
+            public function execute(): void
             {
                 // TODO: implement
             }

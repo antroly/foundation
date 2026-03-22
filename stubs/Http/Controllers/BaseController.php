@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response as Http;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
-use Symfony\Component\Routing\Exception\MethodNotAllowedException;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Throwable;
 
 class BaseController extends Controller
@@ -60,7 +60,7 @@ class BaseController extends Controller
             $e instanceof AuthorizationException       => Http::HTTP_FORBIDDEN,
             $e instanceof ModelNotFoundException       => Http::HTTP_NOT_FOUND,
             $e instanceof FileNotFoundException        => Http::HTTP_NOT_FOUND,
-            $e instanceof MethodNotAllowedException    => Http::HTTP_METHOD_NOT_ALLOWED,
+            $e instanceof MethodNotAllowedHttpException => Http::HTTP_METHOD_NOT_ALLOWED,
             $e instanceof TooManyRequestsHttpException => Http::HTTP_TOO_MANY_REQUESTS,
             $e instanceof HttpException                => $e->getStatusCode(),
             default                                    => Http::HTTP_INTERNAL_SERVER_ERROR,

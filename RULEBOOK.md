@@ -28,8 +28,8 @@ An Action must:
 - extend `App\Actions\Action`
 - be `final`
 - implement exactly one public method: `execute()`
-- accept exactly one typed Submit DTO
-- return a typed Result DTO, `CollectionResult`, or `PaginatedResult`
+- accept typed arguments (one or more DTOs, primitives, or value objects)
+- return a typed Result DTO, `CollectionResult`, `PaginatedResult`, or `void`
 
 ### An Action may:
 - query and persist Eloquent models
@@ -39,6 +39,7 @@ An Action must:
 - inject dependencies via the constructor
 - throw Domain Exceptions or Validation Exceptions
 - map loaded state into Result DTOs, `CollectionResult`s, or `PaginatedResult`s
+- return `void` for command-style operations (deletes, fire-and-forget, event triggers)
 
 ### An Action must:
 - keep the use-case flow explicit
@@ -92,8 +93,8 @@ These interfaces are optional and used when that behavior is needed.
 - Have setters or mutable state
 
 **Naming convention:**
-- Input: `{Action}SubmitDto` — e.g. `CreateCourseSubmitDto`
-- Output: `{Domain}ResultDto` — e.g. `CourseResultDto`
+- Input: `{Name}SubmitDto` — e.g. `CreateCourseSubmitDto`
+- Output: `{Name}ResultDto` — e.g. `CreateCourseResultDto`
 
 ```php
 // correct — SubmitDto with fromRequest() mapping
