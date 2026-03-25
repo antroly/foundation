@@ -5,7 +5,7 @@ The core package powering the **Antroly architecture system** — a strict, mini
 Every request follows a single pipeline:
 
 ```
-FormRequest → SubmitDto → Action → ResultDto → Resource / ViewModel
+ActionRequest → Dto → Action → Dto → Resource / ViewModel
 ```
 
 Each step is mandatory — the pipeline must not be skipped.
@@ -22,12 +22,61 @@ After publishing, your application is fully independent. The Antroly package can
 
 ## Installation
 
+**1. Require the package**
+
 ```bash
 composer require antroly/foundation --dev
+```
+
+**2. Run the installer**
+
+```bash
 php artisan antroly:install
 ```
 
-The installer publishes all base classes and optionally publishes the migration. Follow the printed next steps to register `AppServiceProvider` and `AppExceptionHandler` in `bootstrap/app.php`.
+This publishes all base classes and architecture tests into your application. You will be prompted to publish the activity log migration.
+
+**3. Register the service provider**
+
+In `bootstrap/app.php`:
+
+```php
+->withProviders([
+    App\Providers\AppServiceProvider::class,
+])
+```
+
+This wires `ResponseMacros` (registers `response()->success()` and `response()->error()`) and binds `AppLogger` to `DatabaseLogger`.
+
+**4. Register the exception handler**
+
+In `bootstrap/app.php`:
+
+```php
+->withExceptions(function (Exceptions $exceptions) {
+    App\Exceptions\AppExceptionHandler::register($exceptions);
+})
+```
+
+This handles `ValidationException`, `DomainException`, and unexpected errors — returning a consistent JSON envelope for API requests and redirecting for web requests.
+
+**5. Run the migration**
+
+```bash
+php artisan migrate
+```
+
+Creates the `logs` table used by `DatabaseLogger`.
+
+---
+
+### Swapping the logger
+
+`AppServiceProvider` binds `AppLogger` to `DatabaseLogger` by default. To use a different implementation, rebind it in your own provider:
+
+```php
+$this->app->singleton(AppLogger::class, YourCustomLogger::class);
+```
 
 ---
 
@@ -39,17 +88,28 @@ Base class for all use cases. Each Action represents a single application use ca
 
 Every Action is `final`, exposes one public method `execute()`, and is dispatched via `::run($dto)` — which resolves the Action from the container and injects constructor dependencies automatically.
 
+**Output contract** — Actions may return only:
+
+| Return type | When to use |
+|---|---|
+| `Dto` subclass | Single item — create, read, update |
+| `CollectionResult` | Non-paginated list |
+| `PaginatedResult` | Paginated list |
+| `void` | Side-effect only — delete, dispatch, toggle |
+
+Actions must not return arrays, Eloquent models, Eloquent collections, paginator instances, or HTTP responses. These are enforced by architecture tests.
+
 ```php
 final class CreateCourseAction extends Action
 {
-    public function execute(CreateCourseSubmitDto $dto): CreateCourseResultDto
+    public function execute(CreateCourseData $dto): CourseData
     {
         $course = Course::create([
             'title' => $dto->title,
             'code'  => $dto->code,
         ]);
 
-        return new CreateCourseResultDto(
+        return new CourseData(
             id:    $course->id,
             title: $course->title,
             code:  $course->code,
@@ -62,44 +122,68 @@ CreateCourseAction::run($dto);
 
 ---
 
-### DTOs
+### `app/Dtos/Dto.php`
 
-DTOs are plain `final` classes with no base class. They carry typed input into Actions and typed output out of them.
-
-**SubmitDto** — implements `App\Contracts\Dto\FromRequest` (optional), carries validated HTTP input to the Action:
+Base class for all DTOs. DTOs are pure typed data containers — they carry input into Actions and output out of them.
 
 ```php
-final class CreateCourseSubmitDto implements FromRequest
+final class CreateCourseData extends Dto
 {
     public function __construct(
         public readonly string $title,
         public readonly string $code,
     ) {}
+}
+```
 
-    public static function fromRequest(FormRequest $request): static
+The package provides one DTO abstraction: `Dto`. Naming is application-level convention — use names that describe the data, not the pipeline position:
+
+```
+CreateCourseData       — input to CreateCourseAction
+CourseData             — single course output
+CourseListItemData     — item in a list result
+ListCoursesData        — filter/pagination input
+```
+
+DTOs must not know about `Request`, `FormRequest`, Eloquent models, or HTTP concerns.
+
+---
+
+### `app/Http/Requests/ActionRequest.php`
+
+Base class for all action requests. Enforces `toDto()` on every concrete request.
+
+```php
+abstract class ActionRequest extends FormRequest
+{
+    abstract public function toDto(): Dto;
+}
+```
+
+Every request extends `ActionRequest` and implements `toDto()` to map validated HTTP input into a typed Dto:
+
+```php
+final class CreateCourseRequest extends ActionRequest
+{
+    public function rules(): array
     {
-        return new static(
-            title: $request->validated('title'),
-            code:  $request->validated('code'),
+        return [
+            'title' => ['required', 'string', 'max:255'],
+            'code'  => ['required', 'string', 'unique:courses,code'],
+        ];
+    }
+
+    public function toDto(): CreateCourseData
+    {
+        return new CreateCourseData(
+            title: $this->validated('title'),
+            code:  $this->validated('code'),
         );
     }
 }
 ```
 
-**ResultDto** — implements `App\Contracts\Dto\ResultData` (optional), carries typed output from the Action:
-
-```php
-final class CreateCourseResultDto implements ResultData
-{
-    public function __construct(
-        public readonly int    $id,
-        public readonly string $title,
-        public readonly string $code,
-    ) {}
-}
-```
-
-These interfaces are optional and used when that behavior is needed.
+The Request owns the mapping. DTOs do not know about the request.
 
 ---
 
@@ -139,7 +223,7 @@ Provides `toApiError()`, `handleException()`, and `buildRuleBasedErrorBags()` us
 
 ### `app/Http/Resources/BaseResource.php`
 
-API responses extend `BaseResource`. Resources must receive Result DTOs, never Eloquent models.
+API responses extend `BaseResource`. Resources must receive DTOs, never Eloquent models.
 
 ```php
 final class CourseResource extends BaseResource
@@ -158,7 +242,7 @@ final class CourseResource extends BaseResource
 
 ### `app/Http/ViewModels/BaseViewModel.php`
 
-For Blade applications. ViewModels convert Result DTOs into view data via `$this->data`.
+For Blade applications. ViewModels convert DTOs into view data via `$this->data`.
 
 ```php
 final class CourseViewModel extends BaseViewModel
@@ -200,6 +284,28 @@ Both return the same envelope structure:
 
 ---
 
+### `app/Dtos/Common/CollectionResult.php` and `app/Dtos/Common/PaginatedResult.php`
+
+Output wrappers for list and paginated results. Actions must use these instead of returning raw arrays or paginators.
+
+```php
+// Collection
+return new CollectionResult(
+    items: $courses->map(fn($c) => new CourseListItemData(...))->all(),
+);
+
+// Paginated
+return PaginatedResult::fromPaginator(
+    paginator: Course::query()->paginate($dto->perPage),
+    mapper: fn($course) => new CourseListItemData(
+        id:    $course->id,
+        title: $course->title,
+    ),
+);
+```
+
+---
+
 ### `app/Logging/Contracts/AppLogger.php`
 
 Contract for application logging. Inject this wherever logging is needed — never depend on the concrete logger or Laravel's `Log` facade directly.
@@ -228,65 +334,60 @@ Wires `ResponseMacros` and binds `AppLogger` to `DatabaseLogger`. Register this 
 
 ### `make:action`
 
-Generates an Action and its test, grouped by domain:
+Generates an Action and its test. Domain prefix is optional:
 
 ```bash
+# Without domain
+php artisan make:action CreateCourse
+
+# With domain
 php artisan make:action Course/CreateCourse
 ```
 
 Generates:
 ```
+app/Actions/CreateCourseAction.php
+tests/Unit/Actions/CreateCourseActionTest.php
+
 app/Actions/Course/CreateCourseAction.php
 tests/Unit/Actions/Course/CreateCourseActionTest.php
 ```
 
 ---
 
-### `make:dto`
+### `make:action-dto`
 
-Generates a SubmitDto or ResultDto independently:
+Generates a Dto class:
 
 ```bash
-php artisan make:dto Course/CreateCourse --type=submit
-php artisan make:dto Course/CreateCourse --type=result
+php artisan make:action-dto Course/CreateCourseData
+php artisan make:action-dto Course/CourseData
 ```
-
-| Flag | Output |
-|------|--------|
-| `--type=submit` (default) | `CreateCourseSubmitDto` implementing `FromRequest` |
-| `--type=result` | `CreateCourseResultDto` implementing `ResultData` |
 
 Generates:
 ```
-app/Dtos/Course/CreateCourseSubmitDto.php
-app/Dtos/Course/CreateCourseResultDto.php
+app/Dtos/Course/CreateCourseData.php
+app/Dtos/Course/CourseData.php
 ```
 
-DTOs are generated separately because not every Action needs its own DTO pair — some Actions reuse an existing DTO, accept no input, or return a `CollectionResult` or `PaginatedResult` directly.
+Naming is application-level convention. The package does not enforce input/output subtype naming — use names that describe the data.
 
 ---
 
 ### `make:action-request`
 
-Generates a `FormRequest` with a `toDto()` method. Supports two mapping strategies:
+Generates an `ActionRequest` with `toDto()`:
 
 ```bash
-# Request maps to DTO (default)
 php artisan make:action-request Course/CreateCourse
-
-# DTO maps itself via fromRequest()
-php artisan make:action-request Course/CreateCourse --mapping=dto
 ```
-
-| Flag | Behavior |
-|------|----------|
-| `--mapping=request` (default) | Request constructs the DTO inline via `new SubmitDto(...)` |
-| `--mapping=dto` | Request delegates to `SubmitDto::fromRequest($this)` |
 
 Generates:
 ```
 app/Http/Requests/Course/CreateCourseRequest.php
 ```
+
+The generated request extends `ActionRequest` and maps validated input into a Dto via `toDto()`.
 
 ---
 
@@ -306,12 +407,6 @@ php artisan make:action-resource Course/CreateCourse --type=web
 |------|--------|
 | `--type=api` (default) | `CreateCourseResource` extending `BaseResource` |
 | `--type=web` | `CreateCourseViewModel` extending `BaseViewModel` |
-
-Generates:
-```
-app/Http/Resources/Course/CreateCourseResource.php
-app/Http/ViewModels/Course/CreateCourseViewModel.php
-```
 
 ---
 
@@ -336,13 +431,13 @@ Run these commands in sequence to scaffold a complete feature:
 
 ```bash
 php artisan make:action Course/CreateCourse
-php artisan make:dto Course/CreateCourse --type=submit
-php artisan make:dto Course/CreateCourse --type=result
-php artisan make:action-request Course/CreateCourse --mapping=request
+php artisan make:action-dto Course/CreateCourseData
+php artisan make:action-dto Course/CourseData
+php artisan make:action-request Course/CreateCourse
 php artisan make:action-resource Course/CreateCourse --type=api
 ```
 
-This generates the full pipeline — Action, both DTOs, FormRequest, and API Resource — ready for your business logic.
+This generates the full pipeline — Action, both DTOs, ActionRequest, and API Resource — ready for your business logic.
 
 ---
 
@@ -362,28 +457,28 @@ final class CourseController extends BaseController
     }
 }
 
-// Request — validates and maps to SubmitDto
-final class CreateCourseRequest extends FormRequest
+// Request — validates and maps to Dto
+final class CreateCourseRequest extends ActionRequest
 {
     public function rules(): array
     {
         return ['title' => ['required', 'string', 'max:255']];
     }
 
-    public function toDto(): CreateCourseSubmitDto
+    public function toDto(): CreateCourseData
     {
-        return new CreateCourseSubmitDto(title: $this->validated('title'));
+        return new CreateCourseData(title: $this->validated('title'));
     }
 }
 
 // Action
 final class CreateCourseAction extends Action
 {
-    public function execute(CreateCourseSubmitDto $dto): CreateCourseResultDto
+    public function execute(CreateCourseData $dto): CourseData
     {
         $course = Course::create(['title' => $dto->title]);
 
-        return new CreateCourseResultDto(id: $course->id, title: $course->title);
+        return new CourseData(id: $course->id, title: $course->title);
     }
 }
 
@@ -410,7 +505,7 @@ final class CourseController extends BaseController
         $result = ListCoursesAction::run($request->toDto());
 
         return response()->success(200, [
-            'items'       => CourseListResource::collection($result->items),
+            'items'       => CourseListItemResource::collection($result->items),
             'total'       => $result->total,
             'perPage'     => $result->perPage,
             'currentPage' => $result->currentPage,
@@ -422,16 +517,16 @@ final class CourseController extends BaseController
 // Action — maps models to DTOs inside the Action, wraps pagination metadata
 final class ListCoursesAction extends Action
 {
-    public function execute(ListCoursesSubmitDto $dto): PaginatedResult
+    public function execute(ListCoursesData $dto): PaginatedResult
     {
         return PaginatedResult::fromPaginator(
             paginator: Course::query()
                 ->with('instructor')
                 ->paginate($dto->perPage),
-            mapper: fn($course) => new CourseItemDto(
+            mapper: fn($course) => new CourseListItemData(
                 id:         $course->id,
                 title:      $course->title,
-                instructor: new InstructorDto(name: $course->instructor->name),
+                instructor: new InstructorData(name: $course->instructor->name),
             ),
         );
     }
@@ -439,32 +534,6 @@ final class ListCoursesAction extends Action
 ```
 
 No paginator reaches the controller. No database query runs in the Resource.
-
----
-
-### Nested DTOs
-
-Result DTOs may contain nested DTOs for related data:
-
-```php
-final class CourseItemDto implements ResultData
-{
-    public function __construct(
-        public readonly int          $id,
-        public readonly string       $title,
-        public readonly InstructorDto $instructor,
-    ) {}
-}
-
-final class InstructorDto implements ResultData
-{
-    public function __construct(
-        public readonly string $name,
-    ) {}
-}
-```
-
-All relations must be eager loaded in the Action before mapping. Nested DTOs must not trigger any database queries.
 
 ---
 
@@ -476,13 +545,32 @@ Publishing `antroly-tests` adds `tests/Architecture/ArchitectureTest.php` to you
 ./vendor/bin/pest
 ```
 
-Enforces:
-- Actions extend `Action`, are `final`, and do not return Eloquent models or paginators
-- DTOs are `final` and do not depend on Eloquent
-- Resources extend `BaseResource` and do not depend on Eloquent
-- Controllers do not use Eloquent directly
-- ViewModels extend `BaseViewModel`
-- Domain exceptions extend `DomainException` and are `final`
+### Rules enforced by arch tests
+
+| Rule | Enforcement |
+|------|-------------|
+| Actions extend `Action`, are `final` | Arch test |
+| Actions must not depend on `Request` / `FormRequest` | Arch test |
+| Actions must not return Eloquent models or collections | Arch test |
+| Actions must not return paginator instances | Arch test |
+| Actions must not return HTTP responses or `Responsable` | Arch test |
+| DTOs extend `Dto`, are `final` | Arch test |
+| DTOs must not depend on Eloquent | Arch test |
+| DTOs must not depend on `Request` / `FormRequest` | Arch test |
+| Requests extend `ActionRequest`, are `final` | Arch test |
+| Resources extend `BaseResource`, are `final`, no Eloquent | Arch test |
+| ViewModels extend `BaseViewModel`, are `final`, no Eloquent | Arch test |
+| Controllers extend `BaseController`, are `final`, no Eloquent | Arch test |
+| Domain exceptions extend `DomainException`, are `final` | Arch test |
+
+### Rules that remain convention-based
+
+| Rule | Reason |
+|------|--------|
+| Actions must not call other Actions | Method-level; not structurally enforceable |
+| DTOs must be readonly (no mutable state) | Property-level; not in current arch tooling |
+| Resources must receive DTOs, not models | Type-level; not statically checkable |
+| Controllers must call `$request->toDto()` and not reconstruct DTOs manually | Not statically checkable |
 
 See [RULEBOOK.md](RULEBOOK.md) for the full architectural guidelines.
 
@@ -497,9 +585,9 @@ Intentionally absent: repository layers, generic service interfaces, command bus
 ## Contributing
 
 ```bash
-composer pest      # run tests
-composer lint      # pint code style
-composer analyse   # phpstan static analysis
+./vendor/bin/pest   # run tests
+composer lint       # pint code style
+composer analyse    # phpstan static analysis
 ```
 
 ---

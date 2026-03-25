@@ -35,8 +35,10 @@ describe('FoundationServiceProvider', function () {
 
         expect($publishedFiles)
             ->toContain('Action.php')
-            ->toContain('FromRequest.php')
-            ->toContain('ResultData.php')
+            ->toContain('Dto.php')
+            ->toContain('ActionRequest.php')
+            ->toContain('CollectionResult.php')
+            ->toContain('PaginatedResult.php')
             ->toContain('HasErrorCodeInterface.php')
             ->toContain('DomainException.php')
             ->toContain('AppExceptionHandler.php')

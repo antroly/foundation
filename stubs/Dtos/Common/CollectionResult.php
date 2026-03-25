@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace App\Data;
+namespace App\Dtos\Common;
 
-use App\Contracts\Dto\ResultData;
+use App\Dtos\Dto;
 
 /**
- * Wraps a typed list of Result DTOs returned from an Action.
+ * Wraps a typed list of DTOs returned from an Action.
  *
  * Usage:
  *   return new CollectionResult(
- *       items: $courses->map(fn($c) => new CourseItemDto(...))->all(),
+ *       items: $courses->map(fn($c) => new CourseData(...))->all(),
  *   );
  *
- * @template T of ResultData
+ * @template T of Dto
  */
 final class CollectionResult
 {

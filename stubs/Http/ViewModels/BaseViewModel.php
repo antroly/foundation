@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\ViewModels;
 
-use App\Contracts\Dto\ResultData;
+use App\Dtos\Dto;
 
 abstract class BaseViewModel
 {
     public function __construct(
-        protected readonly ResultData $data,
+        protected readonly Dto $data,
     ) {}
 
     /**

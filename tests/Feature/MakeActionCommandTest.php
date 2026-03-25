@@ -32,10 +32,10 @@ describe('make:action', function () {
             ->assertExitCode(0);
     });
 
-    it('fails when name has no domain prefix', function () {
+    it('creates action without domain prefix', function () {
         $this->artisan(MakeActionCommand::class, ['name' => 'CreateCourse'])
-            ->expectsOutputToContain('Action name must include a domain')
-            ->assertExitCode(1);
+            ->expectsOutputToContain('Actions/CreateCourseAction.php')
+            ->assertExitCode(0);
     });
 
 });

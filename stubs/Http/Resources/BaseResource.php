@@ -10,7 +10,7 @@ abstract class BaseResource extends JsonResource
 {
     /**
      * Intentionally accepts mixed — the strict type hint fights Laravel internals.
-     * Convention: always pass a ResultData DTO. Pipeline: Action → ResultData → Resource.
+     * Convention: always pass a Dto. Pipeline: Action → Dto → Resource.
      * Enforce the boundary via architecture tests, not the constructor.
      */
     public function __construct(mixed $resource)

@@ -28,12 +28,12 @@ class FoundationServiceProvider extends ServiceProvider
         $this->publishes([
             // Actions
             __DIR__ . '/../stubs/Actions/Action.php'                             => app_path('Actions/Action.php'),
-            // Contracts - DTO boundaries
-            __DIR__ . '/../stubs/Contracts/Dto/FromRequest.php'                   => app_path('Contracts/Dto/FromRequest.php'),
-            __DIR__ . '/../stubs/Contracts/Dto/ResultData.php'                   => app_path('Contracts/Dto/ResultData.php'),
-            // Data — pipeline output wrappers
-            __DIR__ . '/../stubs/Data/CollectionResult.php'                      => app_path('Data/CollectionResult.php'),
-            __DIR__ . '/../stubs/Data/PaginatedResult.php'                       => app_path('Data/PaginatedResult.php'),
+            // DTOs — base class and output wrappers
+            __DIR__ . '/../stubs/Dtos/Dto.php'                                   => app_path('Dtos/Dto.php'),
+            __DIR__ . '/../stubs/Dtos/Common/CollectionResult.php'               => app_path('Dtos/Common/CollectionResult.php'),
+            __DIR__ . '/../stubs/Dtos/Common/PaginatedResult.php'                => app_path('Dtos/Common/PaginatedResult.php'),
+            // Requests — base class
+            __DIR__ . '/../stubs/Http/Requests/ActionRequest.php'                => app_path('Http/Requests/ActionRequest.php'),
             // Contracts - exceptions
             __DIR__ . '/../stubs/Contracts/Exceptions/HasErrorCodeInterface.php' => app_path('Contracts/Exceptions/HasErrorCodeInterface.php'),
             // Exceptions

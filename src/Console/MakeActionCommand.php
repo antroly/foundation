@@ -11,20 +11,13 @@ use Symfony\Component\Console\Attribute\AsCommand;
 #[AsCommand(name: 'make:action')]
 class MakeActionCommand extends Command
 {
-    protected $signature   = 'make:action {name : The action name, e.g. Course/CreateCourse}';
+    protected $signature   = 'make:action {name : The action name, e.g. CreateCourse or Course/CreateCourse}';
     protected $description = 'Create a new Action with a test';
 
     public function handle(): int
     {
         $name = $this->argument('name');
         assert(is_string($name));
-
-        if (! str_contains($name, '/')) {
-            $this->components->error('Action name must include a domain. Use: make:action Domain/ActionName');
-            $this->components->info('Example: php artisan make:action Course/CreateCourse');
-
-            return self::FAILURE;
-        }
 
         [$domain, $action] = $this->parseName($name);
 
@@ -34,19 +27,25 @@ class MakeActionCommand extends Command
         return self::SUCCESS;
     }
 
-    /** @return array{string, string} */
+    /** @return array{string|null, string} */
     private function parseName(string $name): array
     {
-        [$domain, $action] = explode('/', $name, 2);
+        if (str_contains($name, '/')) {
+            [$domain, $action] = explode('/', $name, 2);
 
-        return [Str::studly($domain), Str::studly($action)];
+            return [Str::studly($domain), Str::studly($action)];
+        }
+
+        return [null, Str::studly($name)];
     }
 
-    private function generateAction(string $domain, string $action): void
+    private function generateAction(?string $domain, string $action): void
     {
         $className = "{$action}Action";
-        $namespace = "App\\Actions\\{$domain}";
-        $path      = app_path("Actions/{$domain}/{$className}.php");
+        $namespace = $domain ? "App\\Actions\\{$domain}" : 'App\\Actions';
+        $path      = $domain
+            ? app_path("Actions/{$domain}/{$className}.php")
+            : app_path("Actions/{$className}.php");
 
         $content = <<<PHP
         <?php
@@ -62,6 +61,7 @@ class MakeActionCommand extends Command
             public function execute(): void
             {
                 // TODO: implement
+                // Return: Dto | CollectionResult | PaginatedResult | void
             }
         }
         PHP;
@@ -70,11 +70,13 @@ class MakeActionCommand extends Command
         $this->components->info("Action [{$path}] created successfully.");
     }
 
-    private function generateTest(string $domain, string $action): void
+    private function generateTest(?string $domain, string $action): void
     {
         $className = "{$action}Action";
-        $namespace = "App\\Actions\\{$domain}";
-        $path      = base_path("tests/Unit/Actions/{$domain}/{$className}Test.php");
+        $namespace = $domain ? "App\\Actions\\{$domain}" : 'App\\Actions';
+        $path      = $domain
+            ? base_path("tests/Unit/Actions/{$domain}/{$className}Test.php")
+            : base_path("tests/Unit/Actions/{$className}Test.php");
 
         $content = <<<PHP
         <?php

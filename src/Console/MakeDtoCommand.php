@@ -8,37 +8,25 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Symfony\Component\Console\Attribute\AsCommand;
 
-#[AsCommand(name: 'make:dto')]
+#[AsCommand(name: 'make:action-dto')]
 class MakeDtoCommand extends Command
 {
-    protected $signature   = 'make:dto {name : The DTO name, e.g. Course/CreateCourse} {--type=submit : The DTO type: submit or result}';
-    protected $description = 'Create a SubmitDto or ResultDto';
+    protected $signature   = 'make:action-dto {name : The DTO name, e.g. Course/CreateCourseData}';
+    protected $description = 'Create a new Dto class';
 
     public function handle(): int
     {
         $name = $this->argument('name');
         assert(is_string($name));
-        $type = $this->option('type');
-        assert(is_string($type));
-
-        if (! in_array($type, ['submit', 'result'], true)) {
-            $this->components->error('Invalid type. Use --type=submit or --type=result.');
-
-            return self::FAILURE;
-        }
 
         [$domain, $base] = $this->parseName($name);
 
-        if ($type === 'submit') {
-            $this->generateSubmitDto($domain, $base);
-        } else {
-            $this->generateResultDto($domain, $base);
-        }
+        $this->generateDto($domain, $base);
 
         return self::SUCCESS;
     }
 
-    /** @return array{string, string} */
+    /** @return array{string|null, string} */
     private function parseName(string $name): array
     {
         if (str_contains($name, '/')) {
@@ -47,16 +35,16 @@ class MakeDtoCommand extends Command
             return [Str::studly($domain), Str::studly($base)];
         }
 
-        $base = Str::studly($name);
-
-        return [$base, $base];
+        return [null, Str::studly($name)];
     }
 
-    private function generateSubmitDto(string $domain, string $base): void
+    private function generateDto(?string $domain, string $base): void
     {
-        $className = "{$base}SubmitDto";
-        $namespace = "App\\Dtos\\{$domain}";
-        $path      = app_path("Dtos/{$domain}/{$className}.php");
+        $className = $base;
+        $namespace = $domain ? "App\\Dtos\\{$domain}" : 'App\\Dtos';
+        $path      = $domain
+            ? app_path("Dtos/{$domain}/{$className}.php")
+            : app_path("Dtos/{$className}.php");
 
         $content = <<<PHP
         <?php
@@ -65,44 +53,9 @@ class MakeDtoCommand extends Command
 
         namespace {$namespace};
 
-        use App\Contracts\Dto\FromRequest;
-        use Illuminate\Foundation\Http\FormRequest;
+        use App\Dtos\Dto;
 
-        final class {$className} implements FromRequest
-        {
-            public function __construct(
-                // TODO: add typed properties
-            ) {}
-
-            public static function fromRequest(FormRequest \$request): static
-            {
-                return new static(
-                    // TODO: map validated fields
-                );
-            }
-        }
-        PHP;
-
-        $this->writeFile($path, $content);
-        $this->components->info("SubmitDto [{$path}] created successfully.");
-    }
-
-    private function generateResultDto(string $domain, string $base): void
-    {
-        $className = "{$base}ResultDto";
-        $namespace = "App\\Dtos\\{$domain}";
-        $path      = app_path("Dtos/{$domain}/{$className}.php");
-
-        $content = <<<PHP
-        <?php
-
-        declare(strict_types=1);
-
-        namespace {$namespace};
-
-        use App\Contracts\Dto\ResultData;
-
-        final class {$className} implements ResultData
+        final class {$className} extends Dto
         {
             public function __construct(
                 // TODO: add typed properties
@@ -111,7 +64,7 @@ class MakeDtoCommand extends Command
         PHP;
 
         $this->writeFile($path, $content);
-        $this->components->info("ResultDto [{$path}] created successfully.");
+        $this->components->info("Dto [{$path}] created successfully.");
     }
 
     private function writeFile(string $path, string $content): void

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Data;
+namespace App\Dtos\Common;
 
-use App\Contracts\Dto\ResultData;
+use App\Dtos\Dto;
 use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 /**
- * Wraps a paginated list of Result DTOs returned from an Action.
+ * Wraps a paginated list of DTOs returned from an Action.
  *
  * The static factory maps models → DTOs inside the Action and extracts
  * pagination metadata, preventing the paginator from leaking past the Action boundary.
@@ -17,13 +17,13 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
  * Usage:
  *   return PaginatedResult::fromPaginator(
  *       paginator: Course::query()->paginate($dto->perPage),
- *       mapper: fn($course) => new CourseItemDto(
+ *       mapper: fn($course) => new CourseData(
  *           id: $course->id,
  *           title: $course->title,
  *       ),
  *   );
  *
- * @template T of ResultData
+ * @template T of Dto
  */
 final class PaginatedResult
 {
@@ -39,7 +39,7 @@ final class PaginatedResult
     ) {}
 
     /**
-     * @template T of ResultData
+     * @template T of Dto
      * @param  Closure(mixed): T  $mapper
      * @return self<T>
      */

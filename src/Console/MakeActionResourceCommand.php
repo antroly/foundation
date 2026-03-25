@@ -65,7 +65,7 @@ class MakeActionResourceCommand extends Command
             public function toArray(Request \$request): array
             {
                 return [
-                    // TODO: map from \$this->resource (ResultDto)
+                    // TODO: map from \$this->resource (Dto)
                 ];
             }
         }
@@ -101,7 +101,7 @@ class MakeActionResourceCommand extends Command
             public function toArray(): array
             {
                 return [
-                    // TODO: map from \$this->data (ResultDto)
+                    // TODO: map from \$this->data (Dto)
                 ];
             }
         }

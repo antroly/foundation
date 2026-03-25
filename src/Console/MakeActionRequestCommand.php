@@ -11,38 +11,25 @@ use Symfony\Component\Console\Attribute\AsCommand;
 #[AsCommand(name: 'make:action-request')]
 class MakeActionRequestCommand extends Command
 {
-    protected $signature   = 'make:action-request {name : The request name, e.g. Course/CreateCourse}
-                              {--mapping=request : Mapping strategy: request (default) or dto}';
+    protected $signature   = 'make:action-request {name : The request name, e.g. Course/CreateCourse}';
     protected $description = 'Create a new Action Request class';
 
     public function handle(): int
     {
-        $name    = $this->argument('name');
-        $mapping = $this->option('mapping');
+        $name = $this->argument('name');
 
         assert(is_string($name));
-        assert(is_string($mapping));
-
-        if (! in_array($mapping, ['request', 'dto'], true)) {
-            $this->components->error("Invalid --mapping value \"{$mapping}\". Allowed values: request, dto.");
-
-            return self::FAILURE;
-        }
 
         [$domain, $base] = $this->parseName($name);
 
         $className = Str::studly($base) . 'Request';
-        $submitDto = Str::studly($base) . 'SubmitDto';
+        $dtoClass  = Str::studly($base) . 'Data';
         $namespace = $domain ? "App\\Http\\Requests\\{$domain}" : 'App\\Http\\Requests';
         $dtoNs     = $domain ? "App\\Dtos\\{$domain}" : 'App\\Dtos';
 
         $path = $domain
             ? app_path("Http/Requests/{$domain}/{$className}.php")
             : app_path("Http/Requests/{$className}.php");
-
-        $toDtoMethod = $mapping === 'dto'
-            ? $this->toDtoViaDtoMapping($submitDto)
-            : $this->toDtoViaRequestMapping($submitDto);
 
         $content = <<<PHP
         <?php
@@ -51,10 +38,10 @@ class MakeActionRequestCommand extends Command
 
         namespace {$namespace};
 
-        use {$dtoNs}\\{$submitDto};
-        use Illuminate\Foundation\Http\FormRequest;
+        use {$dtoNs}\\{$dtoClass};
+        use App\Http\Requests\ActionRequest;
 
-        final class {$className} extends FormRequest
+        final class {$className} extends ActionRequest
         {
             public function authorize(): bool
             {
@@ -71,7 +58,12 @@ class MakeActionRequestCommand extends Command
                 ];
             }
 
-        {$toDtoMethod}
+            public function toDto(): {$dtoClass}
+            {
+                return new {$dtoClass}(
+                    // TODO: map from \$this->validated()
+                );
+            }
         }
         PHP;
 
@@ -79,28 +71,6 @@ class MakeActionRequestCommand extends Command
         $this->components->info("Request [{$path}] created successfully.");
 
         return self::SUCCESS;
-    }
-
-    private function toDtoViaRequestMapping(string $submitDto): string
-    {
-        return <<<PHP
-            public function toDto(): {$submitDto}
-            {
-                return new {$submitDto}(
-                    // TODO: map from \$this->validated()
-                );
-            }
-        PHP;
-    }
-
-    private function toDtoViaDtoMapping(string $submitDto): string
-    {
-        return <<<PHP
-            public function toDto(): {$submitDto}
-            {
-                return {$submitDto}::fromRequest(\$this);
-            }
-        PHP;
     }
 
     /** @return array{string|null, string} */
